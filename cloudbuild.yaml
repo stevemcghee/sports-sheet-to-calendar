@@ -1,0 +1,28 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/calendar-sync', '.']
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/calendar-sync']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'calendar-sync'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/calendar-sync'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'SPREADSHEET_ID=${_SPREADSHEET_ID},CALENDAR_NAME=${_CALENDAR_NAME},PROJECT_ID=${_PROJECT_ID},TIMEZONE=${_TIMEZONE}'
+
+images:
+  - 'gcr.io/$PROJECT_ID/calendar-sync' 

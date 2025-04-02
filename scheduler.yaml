@@ -1,0 +1,9 @@
+name: calendar-sync-job
+schedule: "0 0 * * *"  # Run at midnight every day
+timeZone: "America/Los_Angeles"
+httpTarget:
+  httpMethod: POST
+  uri: https://calendar-sync-${PROJECT_ID}.run.app
+  headers:
+    Content-Type: application/json
+  body: "{}" 
