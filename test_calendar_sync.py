@@ -13,9 +13,9 @@ class TestCalendarSync(unittest.TestCase):
         test_data = [
             ["Basketball"],  # Sport name row
             ["Date", "Day", "Event", "Location", "Time", "Transportation", "Release", "Departure"],  # Headers
-            ["2/10/2024", "Mon", "Team A", "Home", "3:00 PM", "", "", ""],
-            ["2/15-17/2024", "Fri-Sun", "Team B", "Away", "TBD", "", "", ""],
-            ["2/20/2024", "Wed", "Team C", "Home", "5:00 PM", "", "", ""],
+            ["2/10/2025", "Mon", "Team A", "Home", "3:00 PM", "", "", ""],
+            ["2/15-17/2025", "Fri-Sun", "Team B", "Away", "TBD", "", "", ""],
+            ["2/20/2025", "Wed", "Team C", "Home", "5:00 PM", "", "", ""],
         ]
 
         # Parse events
@@ -26,16 +26,16 @@ class TestCalendarSync(unittest.TestCase):
 
         # Test first event
         self.assertEqual(events[0]['summary'], 'Basketball - Team A at Home')
-        self.assertEqual(events[0]['start']['dateTime'], "2024-02-10T15:00:00")
+        self.assertEqual(events[0]['start']['dateTime'], "2025-02-10T15:00:00-07:00")
 
         # Test date range event
         self.assertEqual(events[1]['summary'], 'Basketball - Team B at Away')
-        self.assertEqual(events[1]['start']['date'], "2024-02-15")
-        self.assertEqual(events[1]['end']['date'], "2024-02-18")
+        self.assertEqual(events[1]['start']['date'], "2025-02-15")
+        self.assertEqual(events[1]['end']['date'], "2025-02-18")
 
         # Test event with minimal information
         self.assertEqual(events[2]['summary'], 'Basketball - Team C at Home')
-        self.assertEqual(events[2]['start']['dateTime'], "2024-02-20T17:00:00")
+        self.assertEqual(events[2]['start']['dateTime'], "2025-02-20T17:00:00-07:00")
 
     def test_parse_sports_events_empty_data(self):
         events = parse_sports_events([], "Empty Sheet")
@@ -63,16 +63,18 @@ class TestCalendarSync(unittest.TestCase):
         
         # Check first event
         self.assertEqual(events[0]['summary'], 'Basketball 2025 - Team A at Home')
-        self.assertEqual(events[0]['start']['dateTime'], "2025-02-10T15:00:00")
+        self.assertEqual(events[0]['start']['dateTime'], "2025-02-10T15:00:00-07:00")
+        self.assertEqual(events[0]['end']['dateTime'], "2025-02-10T17:00:00-07:00")  # 2-hour duration
         
         # Check second event (date range)
         self.assertEqual(events[1]['summary'], 'Basketball 2025 - Team B at Away')
         self.assertEqual(events[1]['start']['date'], "2025-02-15")
-        self.assertEqual(events[1]['end']['date'], "2025-02-18")
+        self.assertEqual(events[1]['end']['date'], "2025-02-18")  # End date is exclusive (17 + 1)
         
         # Check third event
         self.assertEqual(events[2]['summary'], 'Basketball 2025 - Team C at Home')
-        self.assertEqual(events[2]['start']['dateTime'], "2025-02-20T17:00:00")
+        self.assertEqual(events[2]['start']['dateTime'], "2025-02-20T17:00:00-07:00")
+        self.assertEqual(events[2]['end']['dateTime'], "2025-02-20T19:00:00-07:00")  # 2-hour duration
 
     def test_parse_sports_events_date_ranges(self):
         # Test data with various date range formats
@@ -89,15 +91,15 @@ class TestCalendarSync(unittest.TestCase):
         
         # Check first event (2/10-13/2025)
         self.assertEqual(events[0]['start']['date'], "2025-02-10")
-        self.assertEqual(events[0]['end']['date'], "2025-02-14")  # End date is exclusive
+        self.assertEqual(events[0]['end']['date'], "2025-02-14")  # End date is exclusive (13 + 1)
         
         # Check second event (4/4-5/2025)
         self.assertEqual(events[1]['start']['date'], "2025-04-04")
-        self.assertEqual(events[1]['end']['date'], "2025-04-06")
+        self.assertEqual(events[1]['end']['date'], "2025-04-06")  # End date is exclusive (5 + 1)
         
         # Check third event (5/7-10/2025)
         self.assertEqual(events[2]['start']['date'], "2025-05-07")
-        self.assertEqual(events[2]['end']['date'], "2025-05-11")
+        self.assertEqual(events[2]['end']['date'], "2025-05-11")  # End date is exclusive (10 + 1)
 
     def test_parse_sports_events_special_times(self):
         # Test data with various time formats
@@ -115,16 +117,20 @@ class TestCalendarSync(unittest.TestCase):
         self.assertEqual(len(events), 5)
         
         # Check first event (2:00 dive, 3:00 swim)
-        self.assertEqual(events[0]['start']['dateTime'], "2025-03-01T14:00:00")
+        self.assertEqual(events[0]['start']['dateTime'], "2025-03-01T14:00:00-07:00")
+        self.assertEqual(events[0]['end']['dateTime'], "2025-03-01T16:00:00-07:00")  # 2-hour duration
         
         # Check second event (3 PM)
-        self.assertEqual(events[1]['start']['dateTime'], "2025-03-02T15:00:00")
+        self.assertEqual(events[1]['start']['dateTime'], "2025-03-02T15:00:00-07:00")
+        self.assertEqual(events[1]['end']['dateTime'], "2025-03-02T17:00:00-07:00")  # 2-hour duration
         
         # Check third event (4)
-        self.assertEqual(events[2]['start']['dateTime'], "2025-03-03T16:00:00")
+        self.assertEqual(events[2]['start']['dateTime'], "2025-03-03T16:00:00-07:00")
+        self.assertEqual(events[2]['end']['dateTime'], "2025-03-03T18:00:00-07:00")  # 2-hour duration
         
         # Check fourth event (3:30 (V only))
-        self.assertEqual(events[3]['start']['dateTime'], "2025-03-04T15:30:00")
+        self.assertEqual(events[3]['start']['dateTime'], "2025-03-04T15:30:00-07:00")
+        self.assertEqual(events[3]['end']['dateTime'], "2025-03-04T17:30:00-07:00")  # 2-hour duration
         
         # Check fifth event (invalid time - should be all-day)
         self.assertTrue('date' in events[4]['start'])
@@ -461,7 +467,7 @@ class TestCalendarSync(unittest.TestCase):
             'start': {'dateTime': '2025-03-15T14:00:00-07:00'},
             'end': {'dateTime': '2025-03-15T16:00:00-07:00'}
         }
-        self.assertEqual(get_event_key(timed_event), '2025-03-15_2025-03-15_Test Event')
+        self.assertEqual(get_event_key(timed_event), '2025-03-15T14:00:00-07:00_2025-03-15T16:00:00-07:00_Test Event')
 
         # Test event with different timezone
         timed_event_tz = {
@@ -469,7 +475,7 @@ class TestCalendarSync(unittest.TestCase):
             'start': {'dateTime': '2025-03-15T14:00:00-08:00'},
             'end': {'dateTime': '2025-03-15T16:00:00-08:00'}
         }
-        self.assertEqual(get_event_key(timed_event_tz), '2025-03-15_2025-03-15_Test Event')
+        self.assertEqual(get_event_key(timed_event_tz), '2025-03-15T14:00:00-08:00_2025-03-15T16:00:00-08:00_Test Event')
 
     def test_event_comparison(self):
         """Test event comparison logic."""
@@ -627,7 +633,7 @@ class TestDateRangeParsing(unittest.TestCase):
         event = self._find_event(events, "Tournament 2")
         self.assertIsNotNone(event)
         self.assertEqual(event['start']['date'], "2025-02-10")
-        self.assertEqual(event['end']['date'], "2025-02-15")
+        self.assertEqual(event['end']['date'], "2025-02-15")  # End date is exclusive
         
     def test_cross_month_range(self):
         """Test format: 4/30-5/2"""
@@ -635,7 +641,7 @@ class TestDateRangeParsing(unittest.TestCase):
         event = self._find_event(events, "Tournament 3")
         self.assertIsNotNone(event)
         self.assertEqual(event['start']['date'], "2025-04-30")
-        self.assertEqual(event['end']['date'], "2025-05-03")
+        self.assertEqual(event['end']['date'], "2025-05-03")  # End date is exclusive
         
     def test_full_range_with_two_digit_year(self):
         """Test format: 5/27-5/31/24"""
@@ -643,7 +649,7 @@ class TestDateRangeParsing(unittest.TestCase):
         event = self._find_event(events, "Tournament 4")
         self.assertIsNotNone(event)
         self.assertEqual(event['start']['date'], "2025-05-27")  # Should use default year 2025
-        self.assertEqual(event['end']['date'], "2025-06-01")
+        self.assertEqual(event['end']['date'], "2025-06-01")  # End date is exclusive
         
     def test_two_day_range_with_year(self):
         """Test format: 4/25-26/2025"""
@@ -651,7 +657,7 @@ class TestDateRangeParsing(unittest.TestCase):
         event = self._find_event(events, "Tournament 5")
         self.assertIsNotNone(event)
         self.assertEqual(event['start']['date'], "2025-04-25")
-        self.assertEqual(event['end']['date'], "2025-04-27")
+        self.assertEqual(event['end']['date'], "2025-04-27")  # End date is exclusive
         
     def test_year_transition_range(self):
         """Test format: 12/31-1/2"""
@@ -660,7 +666,7 @@ class TestDateRangeParsing(unittest.TestCase):
         self.assertIsNotNone(event)
         # Should handle year transition
         self.assertEqual(event['start']['date'], "2025-12-31")
-        self.assertEqual(event['end']['date'], "2026-01-03")
+        self.assertEqual(event['end']['date'], "2026-01-03")  # End date is exclusive
         
     def test_single_day_event(self):
         """Test format: 2/15"""
@@ -673,7 +679,10 @@ class TestDateRangeParsing(unittest.TestCase):
             datetime.fromisoformat(event['start']['dateTime']).strftime('%Y-%m-%d %H:%M'),
             "2025-02-15 15:30"
         )
-        
+        # Check timezone
+        self.assertEqual(event['start']['dateTime'], "2025-02-15T15:30:00-07:00")
+        self.assertEqual(event['end']['dateTime'], "2025-02-15T17:30:00-07:00")
+
     def test_too_long_range(self):
         """Test format: 2/17-25/2025 (should be skipped as > 7 days)"""
         events = parse_sports_events(self.test_sheet, "Test Sheet")

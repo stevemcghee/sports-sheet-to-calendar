@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, date
 from dateutil import parser
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from tqdm import tqdm
 import sys
 import io
+import re
 
 # Load environment variables
 load_dotenv()
@@ -154,268 +155,200 @@ def get_spreadsheet_data(service, spreadsheet_id, sheet_name):
     ).execute()
     return result.get('values', [])
 
-def parse_sports_events(sheet_data, sheet_name):
-    """Parse sports events from sheet data."""
-    events = []
+def parse_date_range(date_str):
+    """Parse a date range string into start and end dates.
     
-    # Get sport name from first row or use sheet name as fallback
-    sport_name = None
-    if sheet_data and len(sheet_data) > 0 and len(sheet_data[0]) > 0:
-        sport_name = sheet_data[0][0].strip()
-    if not sport_name:
-        sport_name = sheet_name.strip()
-        logging.info(f"Using sheet name as sport name: {sport_name}")
-    
-    logging.info(f"Starting to process events for sport: {sport_name}")
-    logging.debug(f"Found sport name: {sport_name}")
-    
-    # Skip header rows
-    for row in sheet_data[2:]:  # Skip first two rows (sport name and headers)
-        if not row or len(row) < 4:  # Skip empty rows or rows without enough data
-            continue
-            
-        try:
-            # Parse date
-            date_str = row[0].strip()
-            if not date_str:
-                continue
-                
-            # Handle date ranges
-            if '-' in date_str:
-                try:
-                    # Default year is 2025
-                    year = 2025
-                    
-                    # Check if the year is at the end of the string
-                    if '/' in date_str:
-                        parts = date_str.split('/')
-                        if len(parts) > 1:  # Has at least month/day
-                            last_part = parts[-1]
-                            if '-' in last_part:  # Year is in the range part
-                                try:
-                                    year_str = last_part.split('-')[0]
-                                    if len(year_str) == 2:  # Two-digit year
-                                        year = 2025  # Always use 2025 for two-digit years
-                                    else:
-                                        year = int(year_str)
-                                    # Remove year from date string for further parsing
-                                    date_str = '/'.join(parts[:-1]) + '/' + last_part.split('-')[1]
-                                except (ValueError, IndexError):
-                                    pass  # Not a valid year, keep using default
-                            else:  # Year is at the end
-                                try:
-                                    year_str = last_part
-                                    if len(year_str) == 2:  # Two-digit year
-                                        year = 2025  # Always use 2025 for two-digit years
-                                    else:
-                                        year = int(year_str)
-                                    # Remove year from date string for further parsing
-                                    date_str = '/'.join(parts[:-1])
-                                except ValueError:
-                                    pass  # Not a valid year, keep using default
-                    
-                    # Split into start and end parts
-                    start_part, end_part = date_str.split('-')
-                    start_part = start_part.strip()
-                    end_part = end_part.strip()
-                    
-                    # Parse start date
-                    start_parts = start_part.split('/')
-                    if len(start_parts) < 2:
-                        continue
-                    start_month = int(start_parts[0])
-                    start_day = int(start_parts[1])
-                    
-                    # Parse end date
-                    if '/' in end_part:  # Has month component
-                        end_parts = end_part.split('/')
-                        if len(end_parts) >= 2:  # Has month/day
-                            end_month = int(end_parts[0])
-                            end_day = int(end_parts[1])
-                        else:
-                            continue
-                    else:
-                        # Just a day number (e.g., "20" in "2/17-20")
-                        end_month = start_month
-                        try:
-                            end_day = int(end_part)
-                        except ValueError:
-                            logging.error(f"Invalid end day in range: {date_str}")
-                            continue
-                    
-                    # Validate basic date components
-                    if not (1 <= start_month <= 12 and 1 <= start_day <= 31 and
-                           1 <= end_month <= 12 and 1 <= end_day <= 31):
-                        logging.error(f"Invalid date range components: {date_str}")
-                        continue
-                    
-                    # Create dates and handle year transitions
-                    try:
-                        start_date = datetime(year, start_month, start_day)
-                        end_date = datetime(year, end_month, end_day)
-                        
-                        # Handle year transitions (e.g., "12/31-1/2")
-                        if end_month < start_month:
-                            end_date = datetime(year + 1, end_month, end_day)
-                        elif end_month == start_month and end_day < start_day:
-                            # If end date appears before start date in same month, try next month
-                            if end_month < 12:
-                                end_date = datetime(year, end_month + 1, end_day)
-                            else:
-                                end_date = datetime(year + 1, 1, end_day)
-                        
-                        # Verify the duration is reasonable (allow up to 7 days for tournaments)
-                        duration = end_date - start_date
-                        if duration.days > 7 or duration.days < 0:
-                            logging.warning(f"Invalid date range duration: {date_str}, duration: {duration.days} days. Skipping.")
-                            continue
-                        
-                        # Add one day to end date to make it inclusive
-                        end_date = end_date + timedelta(days=1)
-                        
-                        # Create event
-                        event = {
-                            'summary': f"{sport_name} - {row[2].strip()} at {row[3].strip()}",
-                            'start': {'date': start_date.strftime('%Y-%m-%d')},
-                            'end': {'date': end_date.strftime('%Y-%m-%d')},
-                            'description': f"Location: {row[3].strip()}\nTime: TBD\nTransportation: {row[5] if len(row) > 5 else '--'}\nRelease Time: {row[6] if len(row) > 6 else '--'}\nDeparture Time: {row[7] if len(row) > 7 else '--'}"
-                        }
-                        events.append(event)
-                        logging.debug(f"Added event: {row[2].strip()} from {start_date.strftime('%Y-%m-%d')} to {(end_date - timedelta(days=1)).strftime('%Y-%m-%d')}")
-                        
-                    except ValueError as ve:
-                        logging.error(f"Invalid date values in range: {date_str} - {str(ve)}")
-                        continue
-                        
-                except Exception as e:
-                    logging.error(f"Error parsing date: {date_str}")
-                    logging.error(str(e))
-                    continue
-                    
-            # Handle single date
+    Supported formats:
+    - Single day: "2/17" or "2/17/2025"
+    - Same month range: "2/17-20" or "2/17-20/2025"
+    - Cross month range: "2/28-3/2" or "2/28-3/2/2025"
+    - Full range with year: "2/17-2/20/2025" or "5/27-5/31/24"
+    """
+    try:
+        # Default year is 2025 for testing
+        default_year = 2025
+        
+        # Split on dash to separate start and end dates
+        parts = date_str.split('-')
+        
+        if len(parts) == 1:
+            # Single day format: "2/17" or "2/17/2025"
+            start_parts = parts[0].split('/')
+            if len(start_parts) == 2:
+                month, day = map(int, start_parts)
+                year = default_year
+            elif len(start_parts) == 3:
+                month, day, year = map(int, start_parts)
+                if year < 100:
+                    year = default_year  # Always use default year for two-digit years
             else:
-                try:
-                    if '/' in date_str:
-                        parts = date_str.split('/')
-                        if len(parts) == 2:
-                            month = int(parts[0])
-                            day = int(parts[1])
-                            year = 2025  # Default to 2025
-                        elif len(parts) == 3:
-                            month = int(parts[0])
-                            day = int(parts[1])
-                            year_str = parts[2]
-                            if len(year_str) == 2:  # Two-digit year
-                                year = 2025  # Always use 2025 for two-digit years
-                            else:
-                                year = int(year_str)
-                        else:
-                            continue
-                    else:
-                        continue
-                        
-                    # Validate date
-                    if not (1 <= month <= 12 and 1 <= day <= 31 and 2000 <= year <= 2100):
-                        logging.error(f"Invalid date: {date_str}")
-                        continue
-                        
-                    date = datetime(year, month, day)
-                    
-                    # Parse time
-                    time_str = row[4].strip() if len(row) > 4 else ''
-                    
-                    # Skip time parsing if it's clearly not a time
-                    if (not time_str or 
-                        time_str.lower() in ['tbd', 'tba', '--', 'all slohs athletes', 'qualifiers', 'all athletes'] or
-                        any(loc in time_str.lower() for loc in ['ridge', 'club', 'cc', 'hs', 'gym', 'field', 'pool'])):
-                        # Create all-day event
-                        event = {
-                            'summary': f"{sport_name} - {row[2].strip()} at {row[3].strip()}",
-                            'start': {'date': date.strftime('%Y-%m-%d')},
-                            'end': {'date': (date + timedelta(days=1)).strftime('%Y-%m-%d')},
-                            'description': f"Location: {row[3].strip()}\nTime: TBD\nTransportation: {row[5] if len(row) > 5 else '--'}\nRelease Time: {row[6] if len(row) > 6 else '--'}\nDeparture Time: {row[7] if len(row) > 7 else '--'}"
-                        }
-                        events.append(event)
-                        logging.debug(f"Added all-day event: {row[2].strip()} at {date}")
-                        continue
-                    
-                    try:
-                        # Handle special time formats
-                        if ',' in time_str:
-                            # Take first time if multiple times specified
-                            time_str = time_str.split(',')[0].strip()
-                            
-                        # Clean up time string - remove parenthetical notes and other text
-                        time_str = time_str.split('(')[0].strip()  # Remove parenthetical notes
-                        time_str = time_str.split('dive')[0].strip()  # Remove 'dive'
-                        time_str = time_str.split('swim')[0].strip()  # Remove 'swim'
-                        time_str = time_str.split('both')[0].strip()  # Remove 'both'
-                        time_str = time_str.split('only')[0].strip()  # Remove 'only'
-                        
-                        # Add AM/PM if missing
-                        if ':' in time_str and not any(x in time_str.upper() for x in ['AM', 'PM']):
-                            hour = int(time_str.split(':')[0])
-                            if hour < 8:  # Assume PM for early hours
-                                time_str += ' PM'
-                            elif hour < 12:  # Assume AM for morning hours
-                                time_str += ' AM'
-                            else:  # Assume PM for afternoon hours
-                                time_str += ' PM'
-                        elif time_str.replace('.', '').isdigit():  # Handle times like "3" or "4"
-                            hour = int(float(time_str))
-                            if hour < 8:  # Assume PM for early hours
-                                time_str = f"{hour}:00 PM"
-                            elif hour < 12:  # Assume AM for morning hours
-                                time_str = f"{hour}:00 AM"
-                            else:  # Assume PM for afternoon hours
-                                time_str = f"{hour}:00 PM"
-                        
-                        # Parse time
-                        try:
-                            parsed_time = datetime.strptime(time_str, '%I:%M %p')
-                        except ValueError:
-                            parsed_time = datetime.strptime(time_str, '%I %p')
-                            
-                        event_time = datetime.combine(date, parsed_time.time())
-                        
-                        # Create timed event
-                        event = {
-                            'summary': f"{sport_name} - {row[2].strip()} at {row[3].strip()}",
-                            'start': {'dateTime': event_time.strftime('%Y-%m-%dT%H:%M:%S'), 'timeZone': 'America/Los_Angeles'},
-                            'end': {'dateTime': (event_time + timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S'), 'timeZone': 'America/Los_Angeles'},
-                            'description': f"Location: {row[3].strip()}\nTime: {time_str}\nTransportation: {row[5] if len(row) > 5 else '--'}\nRelease Time: {row[6] if len(row) > 6 else '--'}\nDeparture Time: {row[7] if len(row) > 7 else '--'}"
-                        }
-                        events.append(event)
-                        logging.debug(f"Added timed event: {row[2].strip()} at {event_time}")
-                        
-                    except Exception as e:
-                        logging.error(f"Error processing time: {time_str}")
-                        logging.error(str(e))
-                        # If time parsing fails, create a timed event with default time (3:30 PM)
-                        event_time = datetime.combine(date, time(15, 30))
-                        event = {
-                            'summary': f"{sport_name} - {row[2].strip()} at {row[3].strip()}",
-                            'start': {'dateTime': event_time.strftime('%Y-%m-%dT%H:%M:%S'), 'timeZone': 'America/Los_Angeles'},
-                            'end': {'dateTime': (event_time + timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%S'), 'timeZone': 'America/Los_Angeles'},
-                            'description': f"Location: {row[3].strip()}\nTime: TBD\nTransportation: {row[5] if len(row) > 5 else '--'}\nRelease Time: {row[6] if len(row) > 6 else '--'}\nDeparture Time: {row[7] if len(row) > 7 else '--'}"
-                        }
-                        events.append(event)
-                        logging.debug(f"Added timed event after time parsing failed: {row[2].strip()} at {event_time}")
-                        continue
-                        
-                except Exception as e:
-                    logging.error(f"Error parsing date: {date_str}")
-                    logging.error(str(e))
-                    continue
-                    
-        except Exception as e:
-            logging.error(f"Error processing row: {row}")
-            logging.error(str(e))
-            continue
+                return None
+                
+            try:
+                start_date = date(year, month, day)
+                end_date = start_date + timedelta(days=1)  # End date is exclusive
+                return start_date, end_date
+            except ValueError:
+                return None
+                
+        else:
+            # Range format
+            start_str = parts[0]
+            end_str = parts[1]
+            year = default_year
             
-    logging.info(f"Total events found: {len(events)}")
-    return events
+            # Parse start date
+            start_parts = start_str.split('/')
+            if len(start_parts) == 2:
+                start_month, start_day = map(int, start_parts)
+            elif len(start_parts) == 3:
+                start_month, start_day, year = map(int, start_parts)
+                if year < 100:
+                    year = default_year  # Always use default year for two-digit years
+            else:
+                return None
+            
+            # Parse end date and year
+            end_parts = end_str.split('/')
+            
+            if len(end_parts) == 3:
+                # Format: "2/17-2/20/2025" or "5/27-5/31/24"
+                if len(end_parts[2]) == 2:  # Two-digit year
+                    year = default_year  # Always use default year for two-digit years
+                else:  # Full year
+                    year = int(end_parts[2])
+                end_parts = end_parts[:2]  # Remove year for further processing
+            
+            if len(end_parts) == 1:
+                # Same month format: "2/17-20"
+                try:
+                    end_day = int(end_parts[0])
+                    end_month = start_month
+                except ValueError:
+                    return None
+            elif len(end_parts) == 2:
+                # Cross month format: "2/28-3/2"
+                try:
+                    end_month, end_day = map(int, end_parts)
+                except ValueError:
+                    return None
+            else:
+                return None
+            
+            try:
+                start_date = date(year, start_month, start_day)
+                end_date = date(year, end_month, end_day)
+                
+                # If end date is before start date and it's a cross-month range,
+                # it might be a year transition
+                if end_date < start_date and end_month < start_month:
+                    end_date = date(year + 1, end_month, end_day)
+                
+                # Add one day to end date to make it exclusive
+                end_date = end_date + timedelta(days=1)
+                
+                # Validate date range is not more than 7 days
+                if (end_date - start_date).days > 7:
+                    return None
+                    
+                return start_date, end_date
+                
+            except ValueError:
+                return None
+                
+    except Exception as e:
+        logging.error(f"Error parsing date range: {date_str} - {str(e)}")
+        return None
 
+def parse_sports_events(sheet_data, sheet_name):
+    """Parse sports events from a sheet."""
+    if not sheet_data or len(sheet_data) < 2:
+        return []
+
+    # Get sport name from first row or use sheet name
+    sport_name = sheet_data[0][0] if sheet_data[0][0] else sheet_name
+    events = []
+
+    # Skip header rows
+    for row in sheet_data[2:]:
+        # Skip rows with insufficient data
+        if len(row) < 4 or not row[0] or not row[2]:
+            continue
+
+        date_str = row[0]
+        event_name = row[2]
+        location = row[3] if len(row) > 3 and row[3] else None
+        time_str = row[4] if len(row) > 4 and row[4] else None
+
+        # Parse date range
+        date_range = parse_date_range(date_str)
+        if not date_range:
+            logging.error(f"Error parsing date: {date_str}")
+            continue
+
+        start_date, end_date = date_range
+
+        # Create event dictionary with base description
+        event = {
+            'summary': f"{sport_name} - {event_name}" + (f" at {location}" if location else ""),
+            'description': f"Sport: {sport_name}\nTime: TBD\nEvent: {event_name}"  # Time always second line
+        }
+
+        if location:
+            event['description'] += f"\nLocation: {location}"
+
+        # Handle time string if provided
+        has_time = False
+        if time_str and time_str.strip().lower() not in ['tbd', 'tba', 'all day']:
+            try:
+                # Try to parse time string
+                # First, extract the first time if there are multiple (e.g., "2:00 dive, 3:00 swim")
+                time_str = time_str.split(',')[0].split('(')[0].strip()
+                
+                # Try to match various time formats
+                time_match = re.match(r'^(\d{1,2})(?::(\d{2}))?\s*(am|pm|AM|PM)?$', time_str)
+                if time_match:
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2)) if time_match.group(2) else 0
+                    period = time_match.group(3)
+
+                    # Adjust hour for PM times
+                    if period and period.lower() == 'pm' and hour != 12:
+                        hour += 12
+                    elif period and period.lower() == 'am' and hour == 12:
+                        hour = 0
+                    elif not period and hour < 8:
+                        # If no AM/PM specified and hour is less than 8, assume PM
+                        hour += 12
+
+                    # Create datetime objects for start and end
+                    start_datetime = datetime.combine(start_date, time(hour, minute))
+                    end_datetime = start_datetime + timedelta(hours=2)  # Default 2-hour duration
+
+                    # Set dateTime fields with timezone
+                    event['start'] = {'dateTime': start_datetime.strftime('%Y-%m-%dT%H:%M:%S-07:00')}
+                    event['end'] = {'dateTime': end_datetime.strftime('%Y-%m-%dT%H:%M:%S-07:00')}
+                    has_time = True
+                    # Update time in description
+                    event['description'] = event['description'].replace('Time: TBD', f'Time: {time_str}')
+            except (ValueError, AttributeError) as e:
+                logging.error(f"Error parsing time: {time_str} - {str(e)}")
+                has_time = False
+
+        # For single day events without time, set a default time of 3:30 PM
+        if not has_time and (end_date - start_date).days == 1:
+            start_datetime = datetime.combine(start_date, time(15, 30))  # 3:30 PM
+            end_datetime = start_datetime + timedelta(hours=2)
+            event['start'] = {'dateTime': start_datetime.strftime('%Y-%m-%dT%H:%M:%S-07:00')}
+            event['end'] = {'dateTime': end_datetime.strftime('%Y-%m-%dT%H:%M:%S-07:00')}
+        elif not has_time:
+            # Multi-day event
+            event['start'] = {'date': start_date.strftime('%Y-%m-%d')}
+            event['end'] = {'date': end_date.strftime('%Y-%m-%d')}
+
+        events.append(event)
+
+    return events
 
 def list_available_sheets(service, spreadsheet_id):
     """List all available sheets in the spreadsheet."""
@@ -516,7 +449,7 @@ def main():
         for sheet_name in available_sheets:
             data = get_spreadsheet_data(sheets_service, args.spreadsheet_id, sheet_name)
             # Estimate 1 event per non-empty row after header
-            total_events_estimate += len([row for row in data[2:] if row and len(row) >= 4])
+            total_events_estimate += len([row for row in data[2:] if row and len(row) >= 5])
             
         # Calculate total operations: sheets processing + event creation + main calendar update
         total_operations = total_sheets + total_events_estimate + 1
@@ -634,49 +567,91 @@ def delete_all_events(service, calendar_id):
         raise
 
 def get_event_key(event):
-    """Generate a unique key for an event based on its properties."""
-    # Extract date and time components
+    """Generate a unique key for an event based on its start/end times and summary."""
     start = event.get('start', {})
     end = event.get('end', {})
+    summary = event.get('summary', '')
     
-    # Get date/time strings, handling both date and dateTime formats
-    start_date = start.get('date') or start.get('dateTime', '')
-    end_date = end.get('date') or end.get('dateTime', '')
-    
-    # Get summary and clean it up
-    summary = event.get('summary', '').strip()
-    
-    # Create a normalized key that includes time components
-    return f"{start_date}_{end_date}_{summary}"
+    # Get start time/date
+    if 'dateTime' in start:
+        # For datetime events, keep the full datetime string
+        start_str = start['dateTime']
+    elif 'date' in start:
+        start_str = start['date']
+    else:
+        return None
+        
+    # Get end time/date
+    if 'dateTime' in end:
+        # For datetime events, keep the full datetime string
+        end_str = end['dateTime']
+    elif 'date' in end:
+        end_str = end['date']
+    else:
+        return None
+        
+    return f"{start_str}_{end_str}_{summary}"
 
 def events_are_equal(event1, event2):
-    """Compare two events to determine if they are equal."""
-    # Compare only the fields we care about
-    fields_to_compare = ['summary', 'start', 'end', 'description']
-    
-    for field in fields_to_compare:
-        val1 = event1.get(field)
-        val2 = event2.get(field)
+    """Compare two events for equality, ignoring timezone differences and handling missing fields."""
+    # Compare summaries (ignoring whitespace)
+    summary1 = event1.get('summary', '').strip()
+    summary2 = event2.get('summary', '').strip()
+    if summary1 != summary2:
+        return False
         
-        # Handle None values
-        if val1 is None and val2 is None:
-            continue
-        if val1 is None or val2 is None:
+    # Compare start times
+    start1 = event1.get('start', {})
+    start2 = event2.get('start', {})
+    
+    # Handle datetime vs date comparison
+    if 'dateTime' in start1 and 'dateTime' in start2:
+        # Strip timezone for comparison
+        date1 = re.sub(r'[+-]\d{2}:\d{2}$', '', start1['dateTime'])
+        date2 = re.sub(r'[+-]\d{2}:\d{2}$', '', start2['dateTime'])
+        if date1 != date2:
             return False
-            
-        # Special handling for start/end times
-        if field in ['start', 'end']:
-            # Compare full dateTime strings, including timezone
-            date1 = val1.get('date') or val1.get('dateTime', '')
-            date2 = val2.get('date') or val2.get('dateTime', '')
-            if date1 != date2:
-                return False
-        else:
-            # For other fields, do exact comparison
-            if val1 != val2:
-                return False
-                
-    return True
+    elif 'date' in start1 and 'date' in start2:
+        if start1['date'] != start2['date']:
+            return False
+    else:
+        # One is date and one is datetime - compare just the date portion
+        date1 = start1.get('date') or start1['dateTime'].split('T')[0]
+        date2 = start2.get('date') or start2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+        
+    # Compare end times
+    end1 = event1.get('end', {})
+    end2 = event2.get('end', {})
+    
+    # Handle datetime vs date comparison
+    if 'dateTime' in end1 and 'dateTime' in end2:
+        # Strip timezone for comparison
+        date1 = re.sub(r'[+-]\d{2}:\d{2}$', '', end1['dateTime'])
+        date2 = re.sub(r'[+-]\d{2}:\d{2}$', '', end2['dateTime'])
+        if date1 != date2:
+            return False
+    elif 'date' in end1 and 'date' in end2:
+        if end1['date'] != end2['date']:
+            return False
+    else:
+        # One is date and one is datetime - compare just the date portion
+        date1 = end1.get('date') or end1['dateTime'].split('T')[0]
+        date2 = end2.get('date') or end2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+        
+    # Compare descriptions (ignoring whitespace and timezone info)
+    # Handle None descriptions as empty strings
+    desc1 = (event1.get('description') or '').strip()
+    desc2 = (event2.get('description') or '').strip()
+    
+    # Clean up descriptions by removing timezone info and whitespace
+    desc1 = re.sub(r'[+-]\d{2}:\d{2}', '', desc1).strip()
+    desc2 = re.sub(r'[+-]\d{2}:\d{2}', '', desc2).strip()
+    
+    return desc1 == desc2
 
 def get_existing_events(service, calendar_id):
     """Get all existing events from the calendar and index them by key."""
