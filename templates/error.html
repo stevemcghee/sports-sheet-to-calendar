@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Error - Google Calendar Sync</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .error-container {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .error-title {
+            color: #721c24;
+            margin-top: 0;
+        }
+        .error-message {
+            color: #721c24;
+            margin-bottom: 20px;
+        }
+        .refresh-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .refresh-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h2 class="error-title">Authentication Error</h2>
+        <p class="error-message">{{ error_message }}</p>
+        <button class="refresh-button" onclick="window.location.reload()">Refresh Page</button>
+    </div>
+</body>
+</html> 

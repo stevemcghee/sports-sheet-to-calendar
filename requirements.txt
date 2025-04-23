@@ -3,4 +3,6 @@ google-auth-httplib2>=0.1.0
 google-api-python-client>=2.0.0
 python-dateutil>=2.8.2
 python-dotenv>=1.0.0
-tqdm>=4.66.0 
+tqdm>=4.66.0
+flask>=2.0.0
+flask-wtf>=1.0.0 

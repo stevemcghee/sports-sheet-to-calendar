@@ -15,6 +15,7 @@ import io
 import re
 import calendar
 from dataclasses import dataclass
+import traceback
 
 # Load environment variables
 load_dotenv()
@@ -64,33 +65,18 @@ class ScrollingHandler(logging.Handler):
             tqdm.write(message)
 
 # Set up logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Log to console
+        logging.FileHandler('calendar_sync.log')  # Log to file
+    ]
+)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-# Create handlers
-scrolling_handler = ScrollingHandler()
-file_handler = logging.FileHandler('out.log')
-
-# Create formatters and add it to handlers
-# Use shorter time format for console, full format for file
-console_formatter = logging.Formatter('%(asctime)s [%(levelname).1s] %(message)s', datefmt='%H:%M:%S')
-file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-
-scrolling_handler.setFormatter(console_formatter)
-file_handler.setFormatter(file_formatter)
-
-# Add handlers to the logger
-logger.addHandler(scrolling_handler)
-logger.addHandler(file_handler)
 
 # Prevent logging from propagating to root logger
 logger.propagate = False
-
-# Capture all logging
-root_logger = logging.getLogger()
-root_logger.addHandler(scrolling_handler)
-root_logger.addHandler(file_handler)
-root_logger.setLevel(logging.DEBUG)
 
 # Prevent other loggers from writing to stdout/stderr
 logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
@@ -102,6 +88,9 @@ SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
     'https://www.googleapis.com/auth/calendar'
 ]
+
+# OAuth configuration
+OAUTH_PORT = 8081
 
 # Default values from environment variables
 DEFAULT_SPREADSHEET_ID = os.getenv('SPREADSHEET_ID')
@@ -129,19 +118,42 @@ def get_google_credentials():
             logger.debug("Credentials are invalid or missing")
             if creds and creds.expired and creds.refresh_token:
                 logger.debug("Attempting to refresh expired credentials")
-                creds.refresh(Request())
-            else:
+                try:
+                    creds.refresh(Request())
+                    logger.debug("Successfully refreshed credentials")
+                except Exception as e:
+                    logger.error(f"Failed to refresh credentials: {str(e)}")
+                    logger.error(traceback.format_exc())
+                    creds = None  # Force new OAuth flow
+            
+            if not creds:
                 logger.debug("Starting new OAuth flow")
                 try:
                     logger.debug("Loading credentials.json")
                     flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-                    logger.debug("Starting local server for OAuth flow")
-                    creds = flow.run_local_server(port=8080)
-                    logger.debug("OAuth flow completed successfully")
+                    logger.debug("Generating authorization URL")
+                    
+                    # Generate authorization URL
+                    auth_url, _ = flow.authorization_url(
+                        access_type='offline',
+                        include_granted_scopes='true'
+                    )
+                    
+                    print("\nPlease go to this URL to authorize the application:")
+                    print(auth_url)
+                    print("\nAfter authorization, enter the code you received:")
+                    code = input("Enter the authorization code: ").strip()
+                    
+                    # Exchange the code for credentials
+                    flow.fetch_token(code=code)
+                    creds = flow.credentials
+                    logger.debug("Successfully obtained credentials from authorization code")
+                        
                 except Exception as e:
                     logger.error(f"Error during OAuth flow: {str(e)}")
-                    logger.error(f"Error type: {type(e)}")
+                    logger.error(traceback.format_exc())
                     raise
+            
             logger.debug("Saving credentials to token.pickle")
             with open('token.pickle', 'wb') as token:
                 pickle.dump(creds, token)
@@ -149,17 +161,22 @@ def get_google_credentials():
         logger.debug("Successfully retrieved valid credentials")
         return creds
     except Exception as e:
-        logger.error(f"Unexpected error in get_google_credentials: {str(e)}")
+        logger.error(f"Error in get_google_credentials: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
 
 def get_spreadsheet_data(service, spreadsheet_id, sheet_name):
     """Fetch data from Google Sheets."""
-    sheet = service.spreadsheets()
-    result = sheet.values().get(
-        spreadsheetId=spreadsheet_id,
-        range=f'{sheet_name}!A:I'  # Adjust range to include all relevant columns
-    ).execute()
-    return result.get('values', [])
+    try:
+        logger.debug(f"Fetching data from sheet: {sheet_name}")
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f'{sheet_name}!A:I'  # Adjust range to include all relevant columns
+        ).execute()
+        return result.get('values', [])
+    except Exception as e:
+        logger.error(f"Error fetching spreadsheet data: {str(e)}")
+        raise
 
 def parse_date_range(date_str):
     """Parse a date range string into start and end dates.
@@ -242,22 +259,16 @@ def parse_date_range(date_str):
         return None
 
 def parse_sports_events(data, sheet_name=None):
-    """Parse sports events from spreadsheet data.
-    
-    Args:
-        data: List of rows from spreadsheet, each row containing event info
-        sheet_name: Optional name of sheet for event description
-        
-    Returns:
-        List of event dictionaries with summary, description, start and end times
-    """
+    """Parse sports events from spreadsheet data."""
     events = []
     
     if not data:
+        logger.warning("No data provided to parse_sports_events")
         return events
         
     # Get sport name from first row
     sport_name = data[0][0] if data and data[0] and data[0][0] else sheet_name
+    logger.info(f"Processing events for sport: {sport_name}")
     
     for row in data[2:]:  # Skip header rows
         if not row or not any(cell for cell in row):  # Skip empty rows
@@ -266,113 +277,82 @@ def parse_sports_events(data, sheet_name=None):
         # Get date range from first cell
         date_str = str(row[0]).strip() if row[0] else ''
         if not date_str or not any(c.isdigit() for c in date_str):
+            logger.debug(f"Skipping row with invalid date: {date_str}")
             continue
             
         date_range = parse_date_range(date_str)
         if not date_range:
+            logger.warning(f"Could not parse date range from: {date_str}")
             continue
             
         # Get event details
         team = str(row[2]).strip() if len(row) > 2 and row[2] else ''
         location = str(row[3]).strip() if len(row) > 3 and row[3] else ''
         time_str = str(row[4]).strip() if len(row) > 4 and row[4] else ''
+        transportation = str(row[5]).strip() if len(row) > 5 and row[5] else ''
+        release_time = str(row[6]).strip() if len(row) > 6 and row[6] else ''
+        departure_time = str(row[7]).strip() if len(row) > 7 and row[7] else ''
         
         if not team:
+            logger.debug(f"Skipping row with no team: {row}")
             continue
             
         start_date = date_range['start']
         end_date = date_range['end']
+        logger.debug(f"Processing event: {team} at {location} on {start_date}")
         
-        # Default to having a time for all events
-        has_time = True
-        display_time = time_str if time_str else "TBD"
+        # Validate date objects
+        if not isinstance(start_date, datetime) or not isinstance(end_date, datetime):
+            logger.error(f"Invalid date objects: start={start_date}, end={end_date}")
+            continue
+            
+        # Format the event with proper timezone handling
+        try:
+            event = {
+                'summary': f'{sport_name} - {team} at {location}',
+                'description': f'From {sheet_name} sheet\nTime: {time_str}',
+                'start': {
+                    'dateTime': f"{start_date.year}-{start_date.month:02d}-{start_date.day:02d}T{start_date.hour:02d}:{start_date.minute:02d}:00-07:00",
+                    'timeZone': 'America/Los_Angeles'
+                },
+                'end': {
+                    'dateTime': f"{end_date.year}-{end_date.month:02d}-{end_date.day:02d}T{end_date.hour:02d}:{end_date.minute:02d}:00-07:00",
+                    'timeZone': 'America/Los_Angeles'
+                },
+                'location': location,
+                'transportation': transportation,
+                'release_time': release_time,
+                'departure_time': departure_time
+            }
+            
+            # Validate event structure
+            if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
+                logger.error(f"Invalid start/end format in event: {event}")
+                continue
+                
+            if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
+                logger.error(f"Event missing dateTime in start/end: {event}")
+                continue
+                
+            logger.debug(f"Created event: {event['summary']}")
+            logger.debug(f"Start time: {event['start']['dateTime']}")
+            logger.debug(f"End time: {event['end']['dateTime']}")
+            
+            events.append(event)
+            
+        except Exception as e:
+            logger.error(f"Error creating event: {str(e)}")
+            logger.error(f"Event data: {event}")
+            logger.error(traceback.format_exc())
+            continue
         
-        # Check for special time formats
-        if time_str.lower() in ['tbd', 'all day', 'all slohs athletes', 'qualifiers', 'all athletes']:
-            # These are all-day events
-            has_time = False
-        elif any(loc in time_str.lower() for loc in ['ridge', 'club', 'cc']):
-            # This is a location in the time field
-            has_time = False
-            display_time = "TBD"
-        else:
-            # Check for special format like "2:00 dive, 3:00 swim"
-            special_time_match = re.search(r'(\d{1,2}):(\d{2})\s*(?:dive|swim)', time_str.lower())
-            if special_time_match:
-                hour = int(special_time_match.group(1))
-                minute = int(special_time_match.group(2))
-                # Assume PM for times before 8
-                if hour < 8:
-                    hour += 12
-                start_date = start_date.replace(hour=hour, minute=minute)
-                end_date = start_date + timedelta(hours=2)
-            else:
-                # Try to parse standard time format
-                time_match = re.search(r'(\d{1,2}):(\d{2})\s*([ap]m)', time_str.lower())
-                if time_match:
-                    # Parse the time components
-                    hour = int(time_match.group(1))
-                    minute = int(time_match.group(2))
-                    meridian = time_match.group(3)
-                    
-                    # Convert to 24-hour format
-                    if meridian == 'pm' and hour < 12:
-                        hour += 12
-                    elif meridian == 'am' and hour == 12:
-                        hour = 0
-                        
-                    # Set the time on start and end dates
-                    start_date = start_date.replace(hour=hour, minute=minute)
-                    end_date = start_date + timedelta(hours=2)
-                else:
-                    # Try to parse just an hour
-                    hour_match = re.search(r'^(\d{1,2})(?:\s*(?:am|pm))?$', time_str.lower())
-                    if hour_match:
-                        hour = int(hour_match.group(1))
-                        # Assume PM if hour < 8, AM if hour >= 8
-                        if hour < 8:
-                            hour += 12
-                        start_date = start_date.replace(hour=hour, minute=0)
-                        end_date = start_date + timedelta(hours=2)
-                    else:
-                        # No valid time found
-                        has_time = False
-        
-        if not has_time:
-            # Set default times for all-day events
-            start_date = start_date.replace(hour=0, minute=0)
-            if end_date == start_date:
-                end_date = start_date + timedelta(days=1)
-            else:
-                end_date = end_date.replace(hour=0, minute=0)
-        
-        # Format the event
-        event = {
-            'summary': f'{sport_name} - {team} at {location}',
-            'description': f'From {sheet_name} sheet\nTime: {display_time}',
-            'start': {'dateTime': None},  # Will be set below
-            'end': {'dateTime': None}     # Will be set below
-        }
-        
-        # Special case for locations-as-times test which expects non-zero-padded days
-        if any(loc in time_str.lower() for loc in ['ridge', 'club', 'cc']):
-            # For this case, we need to match the test's string manipulation
-            day = start_date.day
-            next_day = day + 1
-            event['start']['dateTime'] = f"2025-03-{day}T00:00:00"
-            event['end']['dateTime'] = f"2025-03-{next_day}T00:00:00"
-        else:
-            # All other cases use zero-padded days
-            event['start']['dateTime'] = f"{start_date.year}-{start_date.month:02d}-{start_date.day:02d}T{start_date.hour:02d}:{start_date.minute:02d}:00"
-            event['end']['dateTime'] = f"{end_date.year}-{end_date.month:02d}-{end_date.day:02d}T{end_date.hour:02d}:{end_date.minute:02d}:00"
-        
-        events.append(event)
-        
+    logger.info(f"Successfully parsed {len(events)} events for {sport_name}")
     return events
 
 def list_available_sheets(service, spreadsheet_id):
     """List all available sheets in the spreadsheet."""
     try:
+        logger.debug("Fetching available sheets")
         spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         sheets = spreadsheet.get('sheets', [])
         logger.info("Available sheets:")
@@ -699,75 +679,155 @@ def get_existing_events(service, calendar_id):
         raise
 
 def update_calendar(service, events, calendar_id):
-    """Update calendar with events efficiently."""
+    """Update calendar with new events."""
     try:
+        logger.info("Starting calendar update")
+        logger.info(f"Processing {len(events)} events for calendar {calendar_id}")
+        
         # Get existing events
-        logger.debug("Fetching existing events")
         existing_events = get_existing_events(service, calendar_id)
         logger.info(f"Found {len(existing_events)} existing events")
         
-        # Track events to keep and operation counts
-        events_to_keep = set()
-        events_deleted = 0
-        events_inserted = 0
-        events_changed = 0
+        # Convert existing events to list if it's a dictionary
+        if isinstance(existing_events, dict):
+            logger.debug("Converting existing events from dict to list")
+            existing_events = list(existing_events.values())
         
-        # Process each new event
-        for event in events:
+        # Create a dictionary of existing events for easy lookup
+        existing_events_dict = {}
+        for event in existing_events:
             try:
-                key = get_event_key(event)
-                events_to_keep.add(key)
+                if not isinstance(event, dict):
+                    logger.error(f"Invalid event format in existing events: {event}")
+                    continue
+                    
+                if 'start' not in event or 'end' not in event:
+                    logger.error(f"Event missing start/end times: {event}")
+                    continue
+                    
+                if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
+                    logger.error(f"Invalid start/end format in event: {event}")
+                    logger.error(f"Start type: {type(event['start'])}")
+                    logger.error(f"End type: {type(event['end'])}")
+                    continue
+                    
+                if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
+                    logger.error(f"Event missing dateTime in start/end: {event}")
+                    logger.error(f"Start: {event['start']}")
+                    logger.error(f"End: {event['end']}")
+                    continue
+                    
+                event_key = get_event_key(event)
+                existing_events_dict[event_key] = event
+                logger.debug(f"Added existing event to dictionary: {event_key}")
+            except Exception as e:
+                logger.error(f"Error processing existing event: {str(e)}")
+                logger.error(f"Event data: {event}")
+                logger.error(traceback.format_exc())
+                continue
+        
+        # Process each event
+        events_to_keep = set()
+        events_to_delete = set()
+        events_to_insert = []
+        events_to_change = []
+        
+        for i, event in enumerate(events):
+            try:
+                logger.debug(f"\nProcessing event {i+1}/{len(events)}")
+                logger.debug(f"Event data: {event}")
                 
-                if key in existing_events:
-                    # Event exists, check if it needs updating
-                    existing_event = existing_events[key]
+                # Validate event structure
+                if not isinstance(event, dict):
+                    logger.error(f"Invalid event format: {event}")
+                    continue
+                    
+                if 'start' not in event or 'end' not in event:
+                    logger.error(f"Event missing start/end times: {event}")
+                    continue
+                    
+                if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
+                    logger.error(f"Invalid start/end format in event: {event}")
+                    logger.error(f"Start type: {type(event['start'])}")
+                    logger.error(f"End type: {type(event['end'])}")
+                    continue
+                    
+                if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
+                    logger.error(f"Event missing dateTime in start/end: {event}")
+                    logger.error(f"Start: {event['start']}")
+                    logger.error(f"End: {event['end']}")
+                    continue
+                
+                event_key = get_event_key(event)
+                logger.debug(f"Generated event key: {event_key}")
+                
+                if event_key in existing_events_dict:
+                    logger.debug(f"Found existing event with key: {event_key}")
+                    existing_event = existing_events_dict[event_key]
+                    
                     if not events_are_equal(event, existing_event):
-                        logger.debug(f"Updating existing event: {event['summary']}")
-                        service.events().update(
-                            calendarId=calendar_id,
-                            eventId=existing_event['id'],
-                            body=event
-                        ).execute()
-                        logger.info(f"Updated event: {event['summary']}")
-                        events_changed += 1
+                        logger.debug(f"Event needs update: {event_key}")
+                        events_to_change.append(event)
+                    else:
+                        logger.debug(f"Event unchanged: {event_key}")
+                        events_to_keep.add(event_key)
                 else:
-                    # Create new event
-                    logger.debug(f"Creating new event: {event['summary']}")
-                    created_event = service.events().insert(
-                        calendarId=calendar_id,
-                        body=event
-                    ).execute()
-                    logger.info(f"Created new event: {event['summary']}")
-                    logger.debug(f"Event ID: {created_event.get('id')}")
-                    logger.debug(f"Event URL: {created_event.get('htmlLink')}")
-                    events_inserted += 1
+                    logger.debug(f"New event: {event_key}")
+                    events_to_insert.append(event)
                     
             except Exception as e:
-                logger.error(f"Error processing event {event['summary']}: {str(e)}")
+                logger.error(f"Error processing event {i+1}: {str(e)}")
                 logger.error(f"Error type: {type(e)}")
-                raise
+                logger.error(f"Event data: {event}")
+                logger.error(traceback.format_exc())
+                continue
         
-        # Delete events that no longer exist
-        events_to_delete = set(existing_events.keys()) - events_to_keep
-        for key in events_to_delete:
-            event = existing_events[key]
+        # Find events to delete
+        for event_key in existing_events_dict:
+            if event_key not in events_to_keep:
+                logger.debug(f"Event to delete: {event_key}")
+                events_to_delete.add(event_key)
+        
+        # Apply changes
+        logger.info(f"Applying changes: {len(events_to_insert)} to insert, {len(events_to_change)} to update, {len(events_to_delete)} to delete")
+        
+        # Delete events
+        for event_key in events_to_delete:
             try:
-                logger.debug(f"Deleting obsolete event: {event['summary']}")
-                service.events().delete(
-                    calendarId=calendar_id,
-                    eventId=event['id']
-                ).execute()
-                logger.info(f"Deleted obsolete event: {event['summary']}")
-                events_deleted += 1
+                event = existing_events_dict[event_key]
+                logger.debug(f"Deleting event: {event_key}")
+                service.events().delete(calendarId=calendar_id, eventId=event['id']).execute()
             except Exception as e:
-                logger.error(f"Error deleting event {event['summary']}: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                raise
-                
-        return events_deleted, events_inserted, events_changed
-                
+                logger.error(f"Error deleting event {event_key}: {str(e)}")
+                logger.error(traceback.format_exc())
+        
+        # Insert new events
+        for event in events_to_insert:
+            try:
+                logger.debug(f"Inserting event: {event['summary']}")
+                service.events().insert(calendarId=calendar_id, body=event).execute()
+            except Exception as e:
+                logger.error(f"Error inserting event: {str(e)}")
+                logger.error(f"Event data: {event}")
+                logger.error(traceback.format_exc())
+        
+        # Update changed events
+        for event in events_to_change:
+            try:
+                event_key = get_event_key(event)
+                existing_event = existing_events_dict[event_key]
+                logger.debug(f"Updating event: {event_key}")
+                service.events().update(calendarId=calendar_id, eventId=existing_event['id'], body=event).execute()
+            except Exception as e:
+                logger.error(f"Error updating event {event_key}: {str(e)}")
+                logger.error(f"Event data: {event}")
+                logger.error(traceback.format_exc())
+        
+        logger.info("Calendar update completed successfully")
+        
     except Exception as e:
-        logger.error(f"Error updating calendar: {str(e)}")
+        logger.error(f"Error in update_calendar: {str(e)}")
+        logger.error(traceback.format_exc())
         raise
 
 if __name__ == '__main__':
