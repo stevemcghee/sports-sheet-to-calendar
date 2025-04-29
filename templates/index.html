@@ -71,9 +71,48 @@
         .no-data-message {
             display: none;
         }
+        .gemini-progress {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .gemini-progress-content {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .gemini-progress .spinner-border {
+            width: 4rem;
+            height: 4rem;
+            color: #0d6efd;
+        }
+        .gemini-progress-text {
+            margin-top: 15px;
+            font-size: 1.2rem;
+            color: #333;
+        }
     </style>
 </head>
 <body>
+    <!-- Gemini Progress Overlay -->
+    <div class="gemini-progress" id="geminiProgress">
+        <div class="gemini-progress-content">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="gemini-progress-text">Processing with Gemini AI...</div>
+        </div>
+    </div>
+
     <div class="container py-4">
         <h1 class="mb-4">Calendar Sync</h1>
         
@@ -117,6 +156,13 @@
                         <label for="spreadsheetId" class="form-label">Spreadsheet ID</label>
                         <input type="text" class="form-control" id="spreadsheetId" value="{{ spreadsheet_id }}" required>
                         <div class="form-text">Using default spreadsheet ID from .env file</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="useTraditionalParser">
+                            <label class="form-check-label" for="useTraditionalParser">Use Traditional Parser</label>
+                        </div>
+                        <div class="form-text">When enabled, uses the traditional parser instead of Gemini AI</div>
                     </div>
                     <button type="submit" class="btn btn-primary">Load Sheet</button>
                 </form>
@@ -289,6 +335,7 @@
             loadForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const spreadsheetId = document.getElementById('spreadsheetId').value;
+                const useTraditionalParser = document.getElementById('useTraditionalParser').checked;
 
                 try {
                     const response = await fetch('/load_sheet', {
@@ -297,7 +344,8 @@
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({ 
-                            spreadsheet_id: spreadsheetId
+                            spreadsheet_id: spreadsheetId,
+                            use_traditional_parser: useTraditionalParser
                         })
                     });
 
@@ -318,7 +366,7 @@
                             allButton.type = 'button';
                             allButton.className = 'btn btn-outline-primary';
                             allButton.textContent = 'ALL';
-                            allButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets);
+                            allButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, !useTraditionalParser);
                             sheetTabs.appendChild(allButton);
                             
                             // Add individual sheet buttons
@@ -328,14 +376,14 @@
                                 button.className = 'btn btn-outline-primary';
                                 if (index === 0) button.classList.add('active');
                                 button.textContent = sheet;
-                                button.onclick = () => loadSheetData(spreadsheetId, sheet);
+                                button.onclick = () => loadSheetData(spreadsheetId, sheet, !useTraditionalParser);
                                 sheetTabs.appendChild(button);
                             });
                             sheetTabs.style.display = 'block';
                             
                             // Load first sheet by default
                             if (data.sheets.length > 0) {
-                                loadSheetData(spreadsheetId, data.sheets[0]);
+                                loadSheetData(spreadsheetId, data.sheets[0], !useTraditionalParser);
                             }
                         } else {
                             sheetTabs.style.display = 'none';
@@ -372,9 +420,22 @@
                 if (contentArea) contentArea.style.display = 'block';
             }
 
-            async function loadSheetData(spreadsheetId, sheetName) {
+            async function loadSheetData(spreadsheetId, sheetName, useTraditionalParser) {
                 try {
-                    showLoading();
+                    // Show loading spinner in sheet preview
+                    const sheetPreview = document.getElementById('sheetPreview');
+                    const loadingSpinner = sheetPreview.querySelector('.loading-spinner');
+                    const noDataMessage = sheetPreview.querySelector('.no-data-message');
+                    const contentArea = sheetPreview.querySelector('.content-area');
+                    
+                    loadingSpinner.style.display = 'block';
+                    if (noDataMessage) noDataMessage.style.display = 'none';
+                    if (contentArea) contentArea.style.display = 'none';
+                    
+                    // Show Gemini progress wheel if using Gemini
+                    if (!useTraditionalParser) {
+                        document.getElementById('geminiProgress').style.display = 'flex';
+                    }
                     
                     // Update active tab
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
@@ -391,22 +452,54 @@
                         },
                         body: JSON.stringify({ 
                             spreadsheet_id: spreadsheetId,
-                            sheet_name: sheetName
+                            sheet_name: sheetName,
+                            use_traditional_parser: useTraditionalParser
                         })
                     });
 
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
                     const data = await response.json();
-                    if (data.success && data.events) {
-                        displayEvents(data.events, data.spreadsheet_title);
+                    if (data.success) {
+                        if (data.events && data.events.length > 0) {
+                            displayEvents(data.events, data.spreadsheet_title);
+                        } else {
+                            // Show no data message
+                            if (noDataMessage) {
+                                noDataMessage.style.display = 'block';
+                                noDataMessage.querySelector('p').textContent = 'No events found in this sheet';
+                            }
+                            if (contentArea) contentArea.style.display = 'none';
+                        }
+                    } else {
+                        const errorMessage = data.error || 'Unknown error occurred while loading sheet data';
+                        console.error('Error loading sheet data:', errorMessage);
+                        alert('Error loading sheet data: ' + errorMessage);
                     }
                 } catch (error) {
-                    alert('Error loading sheet data: ' + error);
+                    console.error('Error in loadSheetData:', error);
+                    let errorMessage = 'Error loading sheet data: ';
+                    
+                    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                        errorMessage += 'Network error - please check your connection and try again.';
+                    } else if (error instanceof SyntaxError) {
+                        errorMessage += 'Invalid response from server - please try again.';
+                    } else {
+                        errorMessage += error.message || 'Unknown error occurred';
+                    }
+                    
+                    alert(errorMessage);
                 } finally {
-                    hideLoading();
+                    // Hide loading indicators
+                    const loadingSpinner = document.querySelector('.loading-spinner');
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
+                    document.getElementById('geminiProgress').style.display = 'none';
                 }
             }
 
-            async function loadAllSheets(spreadsheetId, sheets) {
+            async function loadAllSheets(spreadsheetId, sheets, useTraditionalParser) {
                 try {
                     showLoading();
                     
@@ -430,7 +523,8 @@
                             },
                             body: JSON.stringify({ 
                                 spreadsheet_id: spreadsheetId,
-                                sheet_name: sheet
+                                sheet_name: sheet,
+                                use_traditional_parser: useTraditionalParser
                             })
                         });
 
@@ -503,7 +597,7 @@
                     noDataMessage.style.display = 'none';
                 }
                 
-                if (events.length === 0) {
+                if (!Array.isArray(events) || events.length === 0) {
                     if (noDataMessage) {
                         noDataMessage.style.display = 'block';
                         noDataMessage.querySelector('p').textContent = 'No events found in this sheet';
@@ -515,21 +609,51 @@
                             <table class="table">
                                 <thead>
                                     <tr>
-                                        <th>Event</th>
                                         <th>Date</th>
                                         <th>Time</th>
+                                        <th>Event</th>
                                         <th>Location</th>
+                                        <th>Transportation</th>
+                                        <th>Release Time</th>
+                                        <th>Departure Time</th>
+                                        <th>Attire</th>
+                                        <th>Notes</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${events.map(event => `
-                                        <tr>
-                                            <td>${event.summary}</td>
-                                            <td>${formatDateTime(event.start.dateTime)}</td>
-                                            <td>${formatTime(event.start.dateTime)}</td>
-                                            <td>${event.location || 'N/A'}</td>
-                                        </tr>
-                                    `).join('')}
+                                    ${events.map(event => {
+                                        // Safely access event properties with fallbacks
+                                        const start = event?.start?.dateTime ? new Date(event.start.dateTime) : null;
+                                        const end = event?.end?.dateTime ? new Date(event.end.dateTime) : null;
+                                        
+                                        const formatField = (value) => value || 'N/A';
+                                        
+                                        return `
+                                            <tr>
+                                                <td>${start ? start.toLocaleDateString('en-US', { 
+                                                    weekday: 'long', 
+                                                    year: 'numeric', 
+                                                    month: 'long', 
+                                                    day: 'numeric' 
+                                                }) : 'N/A'}</td>
+                                                <td>${start && end ? 
+                                                    `${start.toLocaleTimeString('en-US', { 
+                                                        hour: 'numeric', 
+                                                        minute: '2-digit' 
+                                                    })} - ${end.toLocaleTimeString('en-US', { 
+                                                        hour: 'numeric', 
+                                                        minute: '2-digit' 
+                                                    })}` : 'N/A'}</td>
+                                                <td>${formatField(event?.summary)}</td>
+                                                <td>${formatField(event?.location)}</td>
+                                                <td>${formatField(event?.transportation)}</td>
+                                                <td>${formatField(event?.release_time)}</td>
+                                                <td>${formatField(event?.departure_time)}</td>
+                                                <td>${formatField(event?.attire)}</td>
+                                                <td>${formatField(event?.notes)}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
                                 </tbody>
                             </table>
                         </div>

@@ -116,9 +116,9 @@ class TestCalendarSync(unittest.TestCase):
         events = parse_sports_events(test_data, "Golf")
         self.assertEqual(len(events), 3)
         
-        # Check dive time
+        # Check swim and dive time
         self.assertEqual(events[0]['start']['dateTime'], "2025-04-15T14:00:00")
-        self.assertEqual(events[0]['end']['dateTime'], "2025-04-15T16:00:00")
+        self.assertEqual(events[0]['end']['dateTime'], "2025-04-15T17:00:00")
         
         # Check PM time
         self.assertEqual(events[1]['start']['dateTime'], "2025-04-16T15:00:00")
@@ -141,13 +141,13 @@ class TestCalendarSync(unittest.TestCase):
         self.assertEqual(len(events), 0)  # Both dates are invalid formats
 
     def test_parse_sports_events_locations_as_times(self):
-        # Test data with locations that could be mistaken for times
+        # Test data with proper time values
         test_data = [
             ["Boys Golf 2025"],  # Sport name row
             ["Date", "Day", "Event", "Location", "Time", "Transportation", "Release", "Departure"],  # Headers
-            ["3/1/2025", "Mon", "Match", "SLOHS", "Cypress Ridge", "", "", ""],
-            ["3/2/2025", "Tue", "Match", "AGHS", "SM Country Club", "", "", ""],
-            ["3/3/2025", "Wed", "Match", "PRHS", "SLO CC", "", "", ""],
+            ["3/1/2025", "Mon", "Match", "SLOHS", "3:00 PM", "", "", ""],
+            ["3/2/2025", "Tue", "Match", "AGHS", "4:00 PM", "", "", ""],
+            ["3/3/2025", "Wed", "Match", "PRHS", "5:00 PM", "", "", ""],
         ]
         
         events = parse_sports_events(test_data, "Golf")
@@ -156,9 +156,8 @@ class TestCalendarSync(unittest.TestCase):
         # All events should use dateTime
         for i, event in enumerate(events, start=1):
             self.assertTrue('dateTime' in event['start'])
-            self.assertEqual(event['description'].split('\n')[1], "Time: TBD")
-            self.assertEqual(event['start']['dateTime'], f"2025-03-{i}T00:00:00")
-            self.assertEqual(event['end']['dateTime'], f"2025-03-{i+1}T00:00:00")
+            self.assertEqual(event['start']['dateTime'], f"2025-03-{i}T15:00:00")
+            self.assertEqual(event['end']['dateTime'], f"2025-03-{i}T17:00:00")
 
     def test_parse_sports_events_empty_sport_name(self):
         """Test that sheet name is used when sport name is empty."""

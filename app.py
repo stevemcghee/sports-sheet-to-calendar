@@ -16,6 +16,11 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 import pickle
 from dotenv import load_dotenv
+import google.generativeai as genai
+from google.auth.transport.requests import Request
+import pytz
+from gemini_parser import parse_sheet_with_gemini
+from googleapiclient.errors import HttpError
 
 # Load environment variables
 load_dotenv()
@@ -32,13 +37,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Required for session management
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev')
 
 # OAuth configuration
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
     'https://www.googleapis.com/auth/calendar'
 ]
+
+# Configure Gemini
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+if not GEMINI_API_KEY:
+    logger.warning("GEMINI_API_KEY not found in environment variables")
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-pro')
 
 # Initialize Google Calendar service
 def get_calendar_service():
@@ -73,6 +85,34 @@ def get_calendar_service():
     except Exception as e:
         logger.error(f"Error in get_calendar_service: {str(e)}")
         logger.error(traceback.format_exc())
+        raise
+
+def get_sheets_service():
+    """Get an authenticated Google Sheets service."""
+    try:
+        if 'credentials' not in session:
+            raise Exception('Not authenticated with Google')
+            
+        # Get credentials from session
+        credentials = Credentials(**session['credentials'])
+        
+        # Refresh token if needed
+        if credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+            # Update session with new token
+            session['credentials'] = {
+                'token': credentials.token,
+                'refresh_token': credentials.refresh_token,
+                'token_uri': credentials.token_uri,
+                'client_id': credentials.client_id,
+                'client_secret': credentials.client_secret,
+                'scopes': credentials.scopes
+            }
+        
+        # Build and return the service
+        return build('sheets', 'v4', credentials=credentials)
+    except Exception as e:
+        logger.error(f"Error getting sheets service: {str(e)}")
         raise
 
 @app.route('/')
@@ -140,7 +180,17 @@ def auth_callback():
         flow.fetch_token(code=code)
         creds = flow.credentials
         
-        # Save credentials
+        # Save credentials to session
+        session['credentials'] = {
+            'token': creds.token,
+            'refresh_token': creds.refresh_token,
+            'token_uri': creds.token_uri,
+            'client_id': creds.client_id,
+            'client_secret': creds.client_secret,
+            'scopes': creds.scopes
+        }
+        
+        # Also save to token.pickle for command-line use
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
             
@@ -168,222 +218,200 @@ def auth_callback():
         </html>
         """
 
+@app.route('/check_auth')
+def check_auth():
+    try:
+        # Check both Google OAuth and Gemini API key
+        has_google_auth = bool(session.get('credentials'))
+        has_gemini_key = bool(GEMINI_API_KEY)
+        
+        return jsonify({
+            'authenticated': has_google_auth,
+            'has_gemini_key': has_gemini_key,
+            'error': None if has_google_auth and has_gemini_key else 'Missing authentication'
+        })
+    except Exception as e:
+        logger.error(f"Error checking auth status: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'authenticated': False, 'error': str(e)})
+
 @app.route('/load_sheet', methods=['POST'])
 def load_sheet():
     try:
-        logger.info("Loading sheet data...")
-        data = request.json
+        # Check if user is authenticated
+        if 'credentials' not in session:
+            return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+        data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
         sheet_name = data.get('sheet_name')
-        
+        use_traditional_parser = data.get('use_traditional_parser', False)
+
         if not spreadsheet_id:
-            logger.error("Missing spreadsheet_id")
-            return jsonify({
-                'success': False,
-                'error': 'Missing spreadsheet_id'
-            }), 400
-        
-        logger.info(f"Getting Google credentials for spreadsheet: {spreadsheet_id}")
-        creds = get_google_credentials()
-        sheets_service = build('sheets', 'v4', credentials=creds)
-        
-        # Get spreadsheet title
-        spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-        spreadsheet_title = spreadsheet.get('properties', {}).get('title', 'Untitled Spreadsheet')
-        
-        # If no sheet name provided, list available sheets
-        if not sheet_name:
-            logger.info("No sheet name provided, listing available sheets")
-            sheets = list_available_sheets(sheets_service, spreadsheet_id)
+            return jsonify({'success': False, 'error': 'Spreadsheet ID is required'}), 400
+
+        # Get the spreadsheet title
+        sheets_service = get_sheets_service()
+        try:
+            spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            spreadsheet_title = spreadsheet.get('properties', {}).get('title', 'Untitled Spreadsheet')
+            
+            # Get available sheets if no sheet name is provided
+            if not sheet_name:
+                sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
+                if sheets:
+                    sheet_name = sheets[0]  # Default to first sheet
+                else:
+                    return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'}), 400
+            else:
+                # Verify the requested sheet exists
+                sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
+                if sheet_name not in sheets:
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Sheet "{sheet_name}" not found',
+                        'available_sheets': sheets
+                    }), 400
+        except HttpError as e:
+            if e.resp.status == 404:
+                return jsonify({'success': False, 'error': 'Spreadsheet not found'}), 404
+            return jsonify({'success': False, 'error': f'Error accessing spreadsheet: {str(e)}'}), 500
+
+        # Get the sheet data
+        range_name = f'{sheet_name}!A:Z'  # Get all columns
+        result = sheets_service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=range_name
+        ).execute()
+        values = result.get('values', [])
+
+        if not values:
             return jsonify({
                 'success': True,
-                'sheets': sheets,
-                'spreadsheet_title': spreadsheet_title
+                'spreadsheet_title': spreadsheet_title,
+                'events': [],
+                'message': 'No data found in sheet'
             })
-        
-        logger.info("Getting spreadsheet data...")
-        sheet_data = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
-        events = parse_sports_events(sheet_data, sheet_name)
-        
-        session['proposed_events'] = events
-        session['spreadsheet_id'] = spreadsheet_id
-        session['sheet_name'] = sheet_name
-        
-        logger.info(f"Successfully loaded {len(events)} events")
-        return jsonify({
-            'success': True,
-            'events': events,
-            'spreadsheet_title': spreadsheet_title,
-            'sheet_name': sheet_name
-        })
+
+        # Parse the events
+        try:
+            if use_traditional_parser:
+                events = parse_sports_events(values, sheet_name)
+            else:
+                events = parse_sheet_with_gemini(values)
+                
+            if not events:
+                return jsonify({
+                    'success': True,
+                    'spreadsheet_title': spreadsheet_title,
+                    'events': [],
+                    'message': 'No events found in sheet',
+                    'parser_used': 'traditional' if use_traditional_parser else 'gemini'
+                })
+                
+            return jsonify({
+                'success': True,
+                'spreadsheet_title': spreadsheet_title,
+                'events': events,
+                'parser_used': 'traditional' if use_traditional_parser else 'gemini'
+            })
+        except Exception as e:
+            error_message = str(e)
+            if not use_traditional_parser:
+                error_message = f"Gemini parser error: {error_message}. Try using the traditional parser instead."
+            return jsonify({
+                'success': False,
+                'error': error_message,
+                'parser_used': 'traditional' if use_traditional_parser else 'gemini'
+            }), 500
+
     except Exception as e:
-        logger.error(f"Error in load_sheet: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/preview_changes', methods=['POST'])
 def preview_changes():
     try:
-        logger.info("Starting preview_changes route")
-        service = get_calendar_service()
-        calendar_name = f"{session['sheet_name']} Calendar"
-        logger.info(f"Using calendar name: {calendar_name}")
-        
-        calendar_id = create_or_get_sports_calendar(service, calendar_name)
-        logger.info(f"Got calendar ID: {calendar_id}")
-        
+        data = request.get_json()
+        spreadsheet_id = data.get('spreadsheet_id')
+        sheet_name = data.get('sheet_name')
+        use_traditional_parser = data.get('use_traditional_parser', False)  # Default to Gemini
+
+        if not spreadsheet_id or not sheet_name:
+            return jsonify({'success': False, 'error': 'Spreadsheet ID and sheet name are required'})
+
+        # Get credentials
+        credentials = Credentials(**session['credentials'])
+        sheets_service = build('sheets', 'v4', credentials=credentials)
+        calendar_service = build('calendar', 'v3', credentials=credentials)
+
+        # Get sheet data
+        values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
+        if not values:
+            return jsonify({'success': False, 'error': 'No data found in sheet'})
+
+        # Parse events using either Gemini or traditional parser
+        if use_traditional_parser:
+            logger.info("Using traditional parser")
+            events = parse_sports_events(values, sheet_name)
+        else:
+            logger.info("Using Gemini parser")
+            try:
+                events = parse_sheet_with_gemini(values)
+                if not events:
+                    logger.warning("Gemini parser returned no events, falling back to traditional parser")
+                    events = parse_sports_events(values, sheet_name)
+            except Exception as e:
+                logger.error(f"Error using Gemini parser: {str(e)}")
+                logger.error(traceback.format_exc())
+                logger.info("Falling back to traditional parser")
+                events = parse_sports_events(values, sheet_name)
+
         # Get existing events
-        logger.debug("Fetching existing events")
-        existing_events = get_existing_events(service, calendar_id)
-        logger.info(f"Found {len(existing_events)} existing events")
-        
-        # Get proposed events from session
-        proposed_events = session.get('proposed_events', [])
-        logger.info(f"Found {len(proposed_events)} proposed events")
-        
-        # Convert existing events to list if it's a dictionary
-        if isinstance(existing_events, dict):
-            logger.debug("Converting existing events from dict to list")
-            existing_events = list(existing_events.values())
-        
+        calendar_id = create_or_get_sports_calendar(calendar_service, sheet_name)
+        existing_events = get_existing_events(calendar_service, calendar_id)
+
         # Compare events
-        changes = []
-        for i, event in enumerate(proposed_events):
-            try:
-                logger.debug(f"\nProcessing proposed event {i+1}/{len(proposed_events)}")
-                logger.debug(f"Event data: {event}")
-                
-                # Validate event structure
-                if not isinstance(event, dict):
-                    logger.error(f"Invalid event format: {event}")
-                    continue
-                    
-                if 'start' not in event or 'end' not in event:
-                    logger.error(f"Event missing start/end times: {event}")
-                    continue
-                    
-                if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
-                    logger.error(f"Invalid start/end format in event: {event}")
-                    continue
-                    
-                if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
-                    logger.error(f"Event missing dateTime in start/end: {event}")
-                    logger.error(f"Start: {event['start']}")
-                    logger.error(f"End: {event['end']}")
-                    continue
-                
-                # Format the date for display
-                try:
-                    start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
-                    formatted_date = start_date.strftime('%a, %b %d, %Y %I:%M %p')
-                    logger.debug(f"Formatted date: {formatted_date}")
-                except Exception as e:
-                    logger.error(f"Error formatting date: {str(e)}")
-                    logger.error(f"Event start time: {event['start']['dateTime']}")
-                    continue
-                
-                # Check if event exists
-                existing_event = next(
-                    (e for e in existing_events if events_are_equal(e, event)),
-                    None
-                )
-                
-                if existing_event:
-                    logger.debug(f"Found existing event: {event['summary']}")
-                    changes.append({
-                        'type': 'update',
-                        'event': event,
-                        'date': event['start']['dateTime'],  # For sorting
-                        'formatted_date': formatted_date,
-                        'summary': event['summary'],
-                        'location': event.get('location', 'N/A'),
-                        'transportation': event.get('transportation', 'N/A'),
-                        'release_time': event.get('release_time', 'N/A'),
-                        'departure_time': event.get('departure_time', 'N/A')
-                    })
-                else:
-                    logger.debug(f"New event: {event['summary']}")
-                    changes.append({
-                        'type': 'create',
-                        'event': event,
-                        'date': event['start']['dateTime'],  # For sorting
-                        'formatted_date': formatted_date,
-                        'summary': event['summary'],
-                        'location': event.get('location', 'N/A'),
-                        'transportation': event.get('transportation', 'N/A'),
-                        'release_time': event.get('release_time', 'N/A'),
-                        'departure_time': event.get('departure_time', 'N/A')
-                    })
-                    
-            except Exception as e:
-                logger.error(f"Error processing proposed event {i+1}: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-                continue
-        
+        changes = {
+            'to_add': [],
+            'to_update': [],
+            'to_delete': []
+        }
+
+        # Find events to add or update
+        for event in events:
+            found = False
+            for existing in existing_events:
+                if events_are_equal(event, existing):
+                    found = True
+                    if not events_are_equal(event, existing, compare_all=True):
+                        changes['to_update'].append({
+                            'old': existing,
+                            'new': event
+                        })
+                    break
+            if not found:
+                changes['to_add'].append(event)
+
         # Find events to delete
-        logger.debug("Checking for events to delete")
-        for i, event in enumerate(existing_events):
-            try:
-                logger.debug(f"\nChecking existing event {i+1}/{len(existing_events)}")
-                logger.debug(f"Event data: {event}")
-                
-                if not any(events_are_equal(event, e) for e in proposed_events):
-                    logger.debug(f"Event to delete: {event['summary']}")
-                    
-                    # Format the date for display
-                    try:
-                        start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
-                        formatted_date = start_date.strftime('%a, %b %d, %Y %I:%M %p')
-                        logger.debug(f"Formatted date: {formatted_date}")
-                    except Exception as e:
-                        logger.error(f"Error formatting date: {str(e)}")
-                        logger.error(f"Event start time: {event['start']['dateTime']}")
-                        continue
-                    
-                    changes.append({
-                        'type': 'delete',
-                        'event': event,
-                        'date': event['start']['dateTime'],  # For sorting
-                        'formatted_date': formatted_date,
-                        'summary': event['summary'],
-                        'location': event.get('location', 'N/A'),
-                        'transportation': event.get('transportation', 'N/A'),
-                        'release_time': event.get('release_time', 'N/A'),
-                        'departure_time': event.get('departure_time', 'N/A')
-                    })
-                    
-            except Exception as e:
-                logger.error(f"Error processing existing event {i+1}: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-                continue
-        
-        # Sort changes by date
-        logger.debug("Sorting changes by date")
-        changes.sort(key=lambda x: x['date'])
-        
-        # Remove the temporary date field before returning
-        for change in changes:
-            del change['date']
-        
-        logger.info(f"Preview completed. Found {len(changes)} changes")
+        for existing in existing_events:
+            found = False
+            for event in events:
+                if events_are_equal(event, existing):
+                    found = True
+                    break
+            if not found:
+                changes['to_delete'].append(existing)
+
         return jsonify({
             'success': True,
-            'changes': changes
+            'changes': changes,
+            'parser_used': 'traditional' if use_traditional_parser else 'gemini'
         })
+
     except Exception as e:
         logger.error(f"Error in preview_changes: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 400
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/apply_changes', methods=['POST'])
 def apply_changes():
@@ -519,20 +547,6 @@ def apply_changes():
             'success': False,
             'error': str(e)
         }), 400
-
-@app.route('/check_auth')
-def check_auth():
-    try:
-        if os.path.exists('token.pickle'):
-            with open('token.pickle', 'rb') as token:
-                creds = pickle.load(token)
-                if creds and creds.valid:
-                    return jsonify({'authenticated': True})
-        return jsonify({'authenticated': False})
-    except Exception as e:
-        logger.error(f"Error checking auth status: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({'authenticated': False, 'error': str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True) 

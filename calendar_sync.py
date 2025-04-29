@@ -16,6 +16,7 @@ import re
 import calendar
 from dataclasses import dataclass
 import traceback
+import pandas as pd
 
 # Load environment variables
 load_dotenv()
@@ -178,175 +179,180 @@ def get_spreadsheet_data(service, spreadsheet_id, sheet_name):
         logger.error(f"Error fetching spreadsheet data: {str(e)}")
         raise
 
-def parse_date_range(date_str):
-    """Parse a date range string into start and end dates.
-    
-    Supported formats:
-    - MM/DD (single day in 2025)
-    - MM/DD/YY or MM/DD/YYYY (single day with year)
-    - MM/DD-DD (range within same month)
-    - MM/DD-MM/DD (range across months)
-    - Any of the above with an optional year suffix
-    
-    Returns:
-        Dict with 'start' and 'end' datetime objects, or None if invalid
-    """
+def parse_date(date_str):
+    """Parse a date string in MM/DD/YYYY format."""
     try:
-        if not date_str:
-            return None
-            
-        date_str = date_str.strip()
-        default_year = 2025
-        
-        # Single day with optional year: MM/DD[/YY[YY]]
-        single_day_match = re.match(r'^(\d{1,2})/(\d{1,2})(?:/(\d{2}|\d{4}))?$', date_str)
-        
-        # Same month range with optional year: MM/DD-DD[/YY[YY]]
-        same_month_match = re.match(r'^(\d{1,2})/(\d{1,2})-(\d{1,2})(?:/(\d{2}|\d{4}))?$', date_str)
-        
-        # Cross month range with optional year: MM/DD-MM/DD[/YY[YY]]
-        cross_month_match = re.match(r'^(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{1,2})(?:/(\d{2}|\d{4}))?$', date_str)
-        
-        if single_day_match:
-            month, day, year = single_day_match.groups()
-            year = int(year) if year else default_year
-            if len(str(year)) == 2:
-                year = 2000 + int(year)
-            start_date = datetime(year, int(month), int(day))
-            end_date = start_date  # For single day, end date is same as start date
-            
-        elif same_month_match:
-            month, start_day, end_day, year = same_month_match.groups()
-            year = int(year) if year else default_year
-            if len(str(year)) == 2:
-                year = 2000 + int(year)
-            start_date = datetime(year, int(month), int(start_day))
-            end_date = datetime(year, int(month), int(end_day))
-            
-        elif cross_month_match:
-            start_month, start_day, end_month, end_day, year = cross_month_match.groups()
-            year = int(year) if year else default_year
-            if len(str(year)) == 2:
-                year = 2000 + int(year)
-            start_date = datetime(year, int(start_month), int(start_day))
-            # Handle year transition
-            end_year = year
-            if int(end_month) < int(start_month):
-                end_year += 1
-            end_date = datetime(end_year, int(end_month), int(end_day))
-            
-        else:
-            return None
+        return datetime.strptime(date_str.strip(), "%m/%d/%Y").date()
+    except ValueError:
+        # Try to extract a valid date from strings like "week of 4/28/2025"
+        match = re.search(r'(\d{1,2}/\d{1,2}/\d{4})', date_str)
+        if match:
+            return datetime.strptime(match.group(1), "%m/%d/%Y").date()
+        raise ValueError(f"Invalid date format: {date_str}")
 
-        # Validate dates
-        if not start_date or not end_date:
-            return None
-            
-        # Ensure start date is before end date
-        if end_date < start_date:
-            return None
-            
-        # Check if range is more than 7 days
-        if (end_date - start_date).days > 7:
-            return None
-
-        return {
-            'start': start_date,
-            'end': end_date
-        }
-
-    except (ValueError, TypeError):
+def parse_time(time_str):
+    """Parse time string and return a datetime.time object or None for all-day events."""
+    if not time_str or time_str.lower() in ('tbd', 'all day', 'all-day') or looks_like_location(time_str):
         return None
 
+    # Extract first time if multiple times are present (e.g., "2:00 dive, 3:00 swim")
+    first_time_match = re.search(r'(\d{1,2})(?::(\d{2}))?\s*(?:am|pm)?', time_str.lower())
+    if not first_time_match:
+        return None
+
+    hour = int(first_time_match.group(1))
+    minute = int(first_time_match.group(2)) if first_time_match.group(2) else 0
+
+    # Assume times between 1 and 11 are PM
+    if 1 <= hour <= 11 and 'am' not in time_str.lower():
+        hour += 12
+
+    return datetime.time(hour=hour, minute=minute)
+
+def parse_date_range(date_str):
+    """Parse a date range string (e.g., '2/15-17/2025')."""
+    match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
+    if not match:
+        raise ValueError(f"Invalid date range format: {date_str}")
+        
+    month, start_day, end_day, year = map(int, match.groups())
+    start_date = datetime(year, month, start_day).date()
+    end_date = datetime(year, month, end_day).date()
+    return start_date, end_date
+
+def format_date(date_str):
+    """Format date string to YYYY-MM-DD format."""
+    try:
+        # Split the date string into month, day, and year
+        parts = date_str.split('/')
+        if len(parts) != 3:
+            raise ValueError(f"Invalid date format: {date_str}")
+        
+        month, day, year = parts
+        
+        # Ensure month and day are two digits
+        month = month.zfill(2)
+        day = day.zfill(2)
+        
+        # Format as YYYY-MM-DD
+        return f"{year}-{month}-{day}"
+    except Exception as e:
+        logging.error(f"Error formatting date {date_str}: {str(e)}")
+        raise
+
+def parse_single_time(time_str):
+    """Parse a single time string into a datetime.time object."""
+    time_str = time_str.strip().upper()
+
+    # Handle "3 PM" format
+    pm_match = re.match(r'^(\d{1,2})(?::(\d{2}))?\s*(?:PM|AM)?$', time_str)
+    if pm_match:
+        hours = int(pm_match.group(1))
+        minutes = int(pm_match.group(2)) if pm_match.group(2) else 0
+
+        # Convert to 24-hour format if PM is specified
+        if 'PM' in time_str and hours < 12:
+            hours += 12
+        elif 'AM' in time_str and hours == 12:
+            hours = 0
+
+        return datetime.time(hours, minutes)
+
+    # Handle special cases like "TBD", "All Day", etc.
+    if time_str.lower() in ('tbd', 'all day') or looks_like_location(time_str):
+        return None
+
+    raise ValueError(f"Invalid time format: {time_str}")
+
+def looks_like_location(time_str):
+    """Check if a string looks like a location rather than a time."""
+    # Convert to lowercase for case-insensitive comparison
+    time_str = time_str.lower()
+    
+    # List of common location keywords
+    location_keywords = ['athletes', 'slohs', 'home', 'away', 'field', 'gym', 'stadium', 'court', 'pool']
+    
+    # Check if any location keyword is in the string
+    return any(keyword in time_str for keyword in location_keywords)
+
+def parse_time(time_str, date):
+    """Parse time string into datetime object."""
+    if not time_str or time_str.lower() == 'tbd' or looks_like_location(time_str):
+        # For all-day events, start at midnight
+        return date.replace(hour=0, minute=0, second=0)
+
+    # Extract first time if multiple times are present
+    first_time_match = re.search(r'(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)', time_str)
+    if first_time_match:
+        time_str = first_time_match.group(1)
+    
+    time_obj = parse_single_time(time_str)
+    if time_obj is None:
+        # Handle case where parse_single_time returns None (TBD, All Day, etc.)
+        return date.replace(hour=0, minute=0, second=0)
+    
+    return datetime.datetime.combine(date, time_obj)
+
 def parse_sports_events(data, sheet_name=None):
-    """Parse sports events from spreadsheet data."""
+    """Parse sports events from list data."""
+    if not data or len(data) < 3:  # Need at least sport name, headers, and one event
+        return []
+
+    # Extract sport name from first row or use sheet_name
+    sport_name = data[0][0].strip() if data[0][0].strip() else sheet_name
+
+    # Get headers from second row
+    headers = data[1]
+    date_idx = headers.index("Date")
+    event_idx = headers.index("Event")
+    location_idx = headers.index("Location")
+    time_idx = headers.index("Time")
+
     events = []
-    
-    if not data:
-        logger.warning("No data provided to parse_sports_events")
-        return events
-        
-    # Get sport name from first row
-    sport_name = data[0][0] if data and data[0] and data[0][0] else sheet_name
-    logger.info(f"Processing events for sport: {sport_name}")
-    
-    for row in data[2:]:  # Skip header rows
-        if not row or not any(cell for cell in row):  # Skip empty rows
-            continue
-            
-        # Get date range from first cell
-        date_str = str(row[0]).strip() if row[0] else ''
-        if not date_str or not any(c.isdigit() for c in date_str):
-            logger.debug(f"Skipping row with invalid date: {date_str}")
-            continue
-            
-        date_range = parse_date_range(date_str)
-        if not date_range:
-            logger.warning(f"Could not parse date range from: {date_str}")
-            continue
-            
-        # Get event details
-        team = str(row[2]).strip() if len(row) > 2 and row[2] else ''
-        location = str(row[3]).strip() if len(row) > 3 and row[3] else ''
-        time_str = str(row[4]).strip() if len(row) > 4 and row[4] else ''
-        transportation = str(row[5]).strip() if len(row) > 5 and row[5] else ''
-        release_time = str(row[6]).strip() if len(row) > 6 and row[6] else ''
-        departure_time = str(row[7]).strip() if len(row) > 7 and row[7] else ''
-        
-        if not team:
-            logger.debug(f"Skipping row with no team: {row}")
-            continue
-            
-        start_date = date_range['start']
-        end_date = date_range['end']
-        logger.debug(f"Processing event: {team} at {location} on {start_date}")
-        
-        # Validate date objects
-        if not isinstance(start_date, datetime) or not isinstance(end_date, datetime):
-            logger.error(f"Invalid date objects: start={start_date}, end={end_date}")
-            continue
-            
-        # Format the event with proper timezone handling
+    for row in data[2:]:  # Skip sport name and headers
         try:
-            event = {
-                'summary': f'{sport_name} - {team} at {location}',
-                'description': f'From {sheet_name} sheet\nTime: {time_str}',
-                'start': {
-                    'dateTime': f"{start_date.year}-{start_date.month:02d}-{start_date.day:02d}T{start_date.hour:02d}:{start_date.minute:02d}:00-07:00",
-                    'timeZone': 'America/Los_Angeles'
-                },
-                'end': {
-                    'dateTime': f"{end_date.year}-{end_date.month:02d}-{end_date.day:02d}T{end_date.hour:02d}:{end_date.minute:02d}:00-07:00",
-                    'timeZone': 'America/Los_Angeles'
-                },
-                'location': location,
-                'transportation': transportation,
-                'release_time': release_time,
-                'departure_time': departure_time
+            date_str = row[date_idx]
+            event = row[event_idx]
+            location = row[location_idx]
+            time_str = row[time_idx] if len(row) > time_idx else ""
+
+            # Handle date ranges (e.g., "2/15-17/2025")
+            if "-" in date_str and "/" in date_str:
+                start_date, end_date = parse_date_range(date_str)
+            else:
+                try:
+                    start_date = parse_date(date_str)
+                    end_date = start_date
+                except ValueError:
+                    continue  # Skip invalid dates
+
+            # Parse time and determine if all-day event
+            parsed_time = parse_time(time_str)
+            is_all_day = parsed_time is None
+
+            # Format event
+            event_dict = {
+                "summary": f"{sport_name}: {event} @ {location}",
+                "description": f"Time: {'TBD' if is_all_day else time_str}",
+                "location": location,
             }
-            
-            # Validate event structure
-            if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
-                logger.error(f"Invalid start/end format in event: {event}")
-                continue
-                
-            if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
-                logger.error(f"Event missing dateTime in start/end: {event}")
-                continue
-                
-            logger.debug(f"Created event: {event['summary']}")
-            logger.debug(f"Start time: {event['start']['dateTime']}")
-            logger.debug(f"End time: {event['end']['dateTime']}")
-            
-            events.append(event)
-            
-        except Exception as e:
-            logger.error(f"Error creating event: {str(e)}")
-            logger.error(f"Event data: {event}")
-            logger.error(traceback.format_exc())
-            continue
-        
-    logger.info(f"Successfully parsed {len(events)} events for {sport_name}")
+
+            # Set start and end times based on whether it's an all-day event
+            if is_all_day:
+                # All-day events: start at midnight of start date, end at midnight of next day
+                event_dict["start"] = start_date.strftime("%Y-%m-%d")
+                event_dict["end"] = (end_date + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+            else:
+                # Timed events: use parsed time for start, add 2 hours for end
+                start_datetime = datetime.datetime.combine(start_date, parsed_time)
+                end_datetime = start_datetime + datetime.timedelta(hours=2)
+                event_dict["start"] = start_datetime.strftime("%Y-%m-%dT%H:%M:%S")
+                event_dict["end"] = end_datetime.strftime("%Y-%m-%dT%H:%M:%S")
+
+            events.append(event_dict)
+        except (ValueError, IndexError) as e:
+            continue  # Skip invalid rows
+
     return events
 
 def list_available_sheets(service, spreadsheet_id):
@@ -471,7 +477,7 @@ def main():
             
             if events:
                 # Get sport name from first event
-                sport_name = events[0]['summary'].split(' - ')[0]
+                sport_name = events[0]['summary']
                 sport_event_counts[sport_name] = len(events)
                 total_events += len(events)
                 

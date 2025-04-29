@@ -13,6 +13,29 @@ This script syncs sports events from a Google Spreadsheet to Google Calendars, c
 - Makes all calendars public by default
 - Provides detailed logging and error handling
 
+## Web-based Admin Interface
+
+The application includes a web-based admin interface for easy management of calendar syncs:
+
+- **Interactive Event Preview**: View and verify events before syncing
+- **Parser Selection**: Choose between Gemini AI parser (default) or traditional parser
+- **Real-time Updates**: See changes in real-time as they're applied
+- **Error Handling**: Clear error messages and automatic fallback options
+- **Authentication**: Secure Google OAuth2 authentication
+- **Responsive Design**: Works on desktop and mobile devices
+
+To start the admin interface:
+```bash
+python app.py
+```
+
+The interface will be available at `http://localhost:5000`. You'll need to:
+1. Authenticate with your Google account
+2. Enter the spreadsheet ID and sheet name
+3. Choose your preferred parser (Gemini or traditional)
+4. Preview and confirm the changes
+5. Apply the sync to your calendars
+
 ## Setup
 
 1. Clone this repository:
