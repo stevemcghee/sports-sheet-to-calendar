@@ -151,14 +151,43 @@ def get_sheets_service():
 def index():
     try:
         logger.info("Rendering index page...")
-        # Check if credentials.json exists
-        if not os.path.exists('credentials.json'):
-            return redirect(url_for('setup_credentials'))
+        
+        # Check if we're in production (using environment variables)
+        client_id = os.getenv('GOOGLE_CLIENT_ID')
+        client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+        
+        if client_id and client_secret:
+            # Production mode - using environment variables
+            logger.info("Using environment variables for OAuth credentials")
+            # Create credentials.json from environment variables if it doesn't exist
+            if not os.path.exists('credentials.json'):
+                credentials_data = {
+                    "installed": {
+                        "client_id": client_id,
+                        "project_id": os.getenv('GOOGLE_PROJECT_ID', 'default-project'),
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                        "client_secret": client_secret,
+                        "redirect_uris": [request.url_root.rstrip('/') + '/auth/callback']
+                    }
+                }
+                
+                # Save credentials to file
+                with open('credentials.json', 'w') as f:
+                    json.dump(credentials_data, f, indent=4)
+                logger.info("Created credentials.json from environment variables")
+        else:
+            # Development mode - check for credentials.json file
+            if not os.path.exists('credentials.json'):
+                logger.warning("No credentials.json found and no environment variables set")
+                return redirect(url_for('setup_credentials'))
             
-        # Get spreadsheet ID from .env file
+        # Get spreadsheet ID from environment or .env file
         spreadsheet_id = os.getenv('SPREADSHEET_ID')
         if not spreadsheet_id:
-            logger.warning("No SPREADSHEET_ID found in .env file")
+            logger.warning("No SPREADSHEET_ID found in environment variables")
+            
         return render_template('index.html', spreadsheet_id=spreadsheet_id)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}")
