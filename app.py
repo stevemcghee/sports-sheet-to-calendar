@@ -196,6 +196,14 @@ def index():
 
 @app.route('/setup', methods=['GET', 'POST'])
 def setup_credentials():
+    # Check if we're already configured via environment variables
+    client_id = os.getenv('GOOGLE_CLIENT_ID')
+    client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+    
+    if client_id and client_secret:
+        logger.info("OAuth credentials already configured via environment variables")
+        return redirect(url_for('index'))
+    
     if request.method == 'POST':
         try:
             credentials_data = {
