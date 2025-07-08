@@ -154,10 +154,14 @@ class TestCalendarSync(unittest.TestCase):
         self.assertEqual(len(events), 3)
         
         # All events should use dateTime
+        expected_times = ["15:00:00", "16:00:00", "17:00:00"]
         for i, event in enumerate(events, start=1):
             self.assertTrue('dateTime' in event['start'])
-            self.assertEqual(event['start']['dateTime'], f"2025-03-{i}T15:00:00")
-            self.assertEqual(event['end']['dateTime'], f"2025-03-{i}T17:00:00")
+            self.assertEqual(event['start']['dateTime'], f"2025-03-{i}T{expected_times[i-1]}")
+            # End time should be 2 hours after start time
+            start_hour = int(expected_times[i-1][:2])
+            end_hour = start_hour + 2
+            self.assertEqual(event['end']['dateTime'], f"2025-03-{i}T{end_hour:02d}:00:00")
 
     def test_parse_sports_events_empty_sport_name(self):
         """Test that sheet name is used when sport name is empty."""

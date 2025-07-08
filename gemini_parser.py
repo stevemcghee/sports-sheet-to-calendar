@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 import re
+import datetime
 
 # Load environment variables
 load_dotenv()
@@ -13,7 +14,28 @@ def initialize_gemini():
     if not api_key:
         raise ValueError("GEMINI_API_KEY not found in environment variables")
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-2.0-flash')
+
+    # Configure safety settings
+    safety_settings = [
+        {
+            "category": "HARM_CATEGORY_HARASSMENT",
+            "threshold": "BLOCK_NONE",
+        },
+        {
+            "category": "HARM_CATEGORY_HATE_SPEECH",
+            "threshold": "BLOCK_NONE",
+        },
+        {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "threshold": "BLOCK_NONE",
+        },
+        {
+            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+            "threshold": "BLOCK_NONE",
+        },
+    ]
+
+    return genai.GenerativeModel('models/gemini-1.5-pro-latest', safety_settings=safety_settings)
 
 def parse_sheet_with_gemini(values, model=None):
     """Parse sheet contents using Gemini.
@@ -35,23 +57,20 @@ def parse_sheet_with_gemini(values, model=None):
         {{
             "events": [
                 {{
-                    "summary": "event title",
+                    "summary": "Sport Name: Event Name @ Location",
                     "start": {{
-                        "dateTime": "ISO 8601 datetime string",
-                        "timeZone": "IANA timezone name (e.g., America/Los_Angeles)"
+                        "dateTime": "YYYY-MM-DDTHH:MM:SS",
+                        "timeZone": "America/Los_Angeles"
                     }},
                     "end": {{
-                        "dateTime": "ISO 8601 datetime string",
-                        "timeZone": "IANA timezone name (e.g., America/Los_Angeles)"
+                        "dateTime": "YYYY-MM-DDTHH:MM:SS",
+                        "timeZone": "America/Los_Angeles"
                     }},
                     "location": "event location",
-                    "description": "event description",
-                    "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20241231T235959Z"],  # For recurring events
-                    "transportation": "transportation details",
-                    "release_time": "release time",
-                    "departure_time": "departure time",
-                    "attire": "dress code",
-                    "notes": "additional notes"
+                    "description": "Location: location",
+                    "recurrence": [
+                        "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"  # Only include if event is recurring
+                    ]
                 }}
             ]
         }}
@@ -60,40 +79,56 @@ def parse_sheet_with_gemini(values, model=None):
         {values}
 
         Important:
-        - Convert all dates and times to ISO 8601 format
-        - If a time is not specified, assume 9:00 AM
-        - If a date is not specified, use today's date
-        - For end times, if not specified, assume 1 hour after start time
-        - Use "N/A" for any empty or missing fields
-        - Preserve all original text exactly as it appears in the spreadsheet
-        - If a field contains multiple values (like multiple locations), combine them with semicolons
-        - For transportation, include any bus numbers, departure points, or special instructions
-        - For attire, include any specific dress code requirements
-        - For notes, include any additional information that doesn't fit in other fields
-        - Return only valid events with at least a title and date
-        - Maintain the original order of events as they appear in the spreadsheet
-        - Return ONLY the JSON object, no additional text or markdown formatting
-        - Escape any special characters in strings (e.g., quotes, newlines)
-        - Do not include any comments or explanations in the JSON
-        - If you can't parse an event, skip it and continue with the next one
-        - Return an empty events list if no valid events are found
+        1. Format Requirements:
+           - First row contains the sport name
+           - Second row contains column headers
+           - Subsequent rows contain event data
+           - Required columns: "Start Datetime", "Event", "Location"
+           - Optional columns: "End Datetime", "Recurrence"
 
-        For recurring events:
-        - Use RRULE format for recurrence rules
-        - Common patterns:
-          * Weekly: RRULE:FREQ=WEEKLY;BYDAY=MO (every Monday)
-          * Bi-weekly: RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=WE (every other Wednesday)
-          * Monthly: RRULE:FREQ=MONTHLY;BYDAY=1TH (first Thursday of month)
-          * Daily: RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR (weekdays)
-          * Multiple days: RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR (Mon/Wed/Fri)
-          * Until date: RRULE:FREQ=WEEKLY;BYDAY=TU;UNTIL=20241231T235959Z (until end of 2024)
+        2. Event Formatting:
+           - Summary format: "{{sport_name}}: {{event_name}} @ {{location}}"
+           - Description format: "Location: {{location}}"
+           - All events must have a start datetime
+           - If end datetime is not provided, add 2 hours to start time
+           - Use America/Los_Angeles timezone for all events
 
-        For timezones:
-        - Always include the timeZone field
-        - Use IANA timezone names (e.g., America/Los_Angeles, Europe/London)
-        - For timezone abbreviations (PST, EST, etc.), convert to full IANA names
-        - For mixed timezone events, use the primary timezone
-        - Default to America/Los_Angeles if no timezone is specified
+        3. Datetime Handling:
+           - Accept these datetime formats:
+             * YYYY-MM-DD HH:MM
+             * MM/DD/YYYY HH:MM
+             * Relative dates (e.g., "next Monday", "every Tuesday")
+             * Recurring patterns (e.g., "every Monday", "every other Wednesday")
+           - Convert all datetimes to ISO 8601 format (YYYY-MM-DDTHH:MM:SS)
+           - If time is missing, assume 9:00 AM
+           - If date is missing, skip the event
+
+        4. Recurring Events:
+           - If an event is recurring, include a recurrence rule in RRULE format
+           - Common patterns:
+             * Weekly: "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"
+             * Bi-weekly: "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=WE"
+             * Monthly: "RRULE:FREQ=MONTHLY;BYDAY=1TH"
+             * Daily: "RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"
+           - Include end date if specified (e.g., "until Dec 2024")
+           - Skip if recurrence pattern is unclear
+
+        5. Data Processing:
+           - Skip any rows that don't have all required fields
+           - Preserve original text exactly as it appears
+           - Return only valid events with all required fields
+           - Maintain the original order of events
+           - Return ONLY the JSON object, no additional text
+           - Escape special characters in strings
+           - Skip any events that can't be properly parsed
+
+        6. Error Handling:
+           - If no valid events are found, return empty events list
+           - Log any parsing errors but continue processing
+           - Skip events with invalid datetime formats
+           - Skip events missing required fields
+
+        Return ONLY the JSON object, no additional text or markdown formatting.
         """
 
         response = gemini_model.generate_content(prompt)
@@ -149,8 +184,64 @@ def parse_sheet_with_gemini(values, model=None):
                 print(f"Events is not a list: {events}")
                 return []
                 
-            print(f"Successfully parsed {len(events)} events")  # Debug logging
-            return events
+            # Validate and clean each event
+            cleaned_events = []
+            for event in events:
+                try:
+                    # Ensure required fields are present
+                    if not all(key in event for key in ['summary', 'start', 'end', 'location', 'description']):
+                        print(f"Missing required fields in event: {event}")
+                        continue
+                        
+                    # Ensure start and end have required fields
+                    if not all(key in event['start'] for key in ['dateTime', 'timeZone']):
+                        print(f"Missing required fields in start: {event['start']}")
+                        continue
+                    if not all(key in event['end'] for key in ['dateTime', 'timeZone']):
+                        print(f"Missing required fields in end: {event['end']}")
+                        continue
+                        
+                    # Clean up the event
+                    cleaned_event = {
+                        'summary': event['summary'].strip(),
+                        'start': {
+                            'dateTime': event['start']['dateTime'].strip(),
+                            'timeZone': 'America/Los_Angeles'
+                        },
+                        'end': {
+                            'dateTime': event['end']['dateTime'].strip(),
+                            'timeZone': 'America/Los_Angeles'
+                        },
+                        'location': event['location'].strip(),
+                        'description': event['description'].strip()
+                    }
+                    
+                    # Validate datetime format
+                    try:
+                        datetime.datetime.fromisoformat(cleaned_event['start']['dateTime'].replace('Z', '+00:00'))
+                        datetime.datetime.fromisoformat(cleaned_event['end']['dateTime'].replace('Z', '+00:00'))
+                    except ValueError:
+                        print(f"Invalid datetime format in event: {cleaned_event}")
+                        continue
+
+                    # Validate recurrence rule if present
+                    if 'recurrence' in event:
+                        if not isinstance(event['recurrence'], list):
+                            print(f"Invalid recurrence format in event: {event}")
+                            continue
+                        for rule in event['recurrence']:
+                            if not rule.startswith('RRULE:'):
+                                print(f"Invalid recurrence rule format: {rule}")
+                                continue
+                        cleaned_event['recurrence'] = event['recurrence']
+                        
+                    cleaned_events.append(cleaned_event)
+                except Exception as e:
+                    print(f"Error cleaning event: {e}")
+                    continue
+                    
+            print(f"Successfully parsed {len(cleaned_events)} events")  # Debug logging
+            return cleaned_events
             
         except json.JSONDecodeError as e:
             print(f"Error parsing JSON from Gemini response: {e}")

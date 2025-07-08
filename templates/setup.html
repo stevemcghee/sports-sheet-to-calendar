@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Google Calendar Sync</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            margin-bottom: 20px;
+        }
+        .instructions {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4285f4;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+    </style>
+</head>
+<body>
+    <h1>Setup Google Calendar Sync</h1>
+    
+    {% if error %}
+    <div class="error">
+        {{ error }}
+    </div>
+    {% endif %}
+    
+    <div class="instructions">
+        <h2>How to get your credentials:</h2>
+        <ol>
+            <li>Go to the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a></li>
+            <li>Create a new project or select an existing one</li>
+            <li>Enable the Google Calendar API and Google Sheets API</li>
+            <li>Go to "APIs & Services" > "Credentials"</li>
+            <li>Click "Create Credentials" > "OAuth client ID"</li>
+            <li>Select "Desktop app" as the application type</li>
+            <li>Enter a name for your OAuth client</li>
+            <li>Click "Create"</li>
+            <li>Copy the Client ID and Client Secret from the popup</li>
+        </ol>
+    </div>
+    
+    <form method="POST" action="{{ url_for('setup_credentials') }}">
+        <div class="form-group">
+            <label for="client_id">Client ID:</label>
+            <input type="text" id="client_id" name="client_id" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="client_secret">Client Secret:</label>
+            <input type="text" id="client_secret" name="client_secret" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="project_id">Project ID:</label>
+            <input type="text" id="project_id" name="project_id" required>
+        </div>
+        
+        <button type="submit">Save Credentials</button>
+    </form>
+</body>
+</html> 

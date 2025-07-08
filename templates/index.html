@@ -457,45 +457,43 @@
                         })
                     });
 
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    
+                    if (data.needs_auth || (data.error && data.error.includes('re-authenticate'))) {
+                        // Show authentication button and status
+                        authButton.style.display = 'block';
+                        authStatus.innerHTML = '<p class="text-danger">Authentication required</p>';
+                        disableControls();
+                        return;
                     }
 
-                    const data = await response.json();
                     if (data.success) {
-                        if (data.events && data.events.length > 0) {
-                            displayEvents(data.events, data.spreadsheet_title);
-                        } else {
-                            // Show no data message
-                            if (noDataMessage) {
-                                noDataMessage.style.display = 'block';
-                                noDataMessage.querySelector('p').textContent = 'No events found in this sheet';
-                            }
-                            if (contentArea) contentArea.style.display = 'none';
-                        }
+                        // Display the data
+                        displaySheetData(data);
                     } else {
-                        const errorMessage = data.error || 'Unknown error occurred while loading sheet data';
-                        console.error('Error loading sheet data:', errorMessage);
-                        alert('Error loading sheet data: ' + errorMessage);
+                        // Check if the error is related to authentication
+                        if (data.error && (data.error.includes('expired') || data.error.includes('revoked'))) {
+                            authButton.style.display = 'block';
+                            authStatus.innerHTML = '<p class="text-danger">Your session has expired. Please re-authenticate.</p>';
+                            disableControls();
+                        } else {
+                            alert('Error loading sheet: ' + data.error);
+                        }
                     }
                 } catch (error) {
-                    console.error('Error in loadSheetData:', error);
-                    let errorMessage = 'Error loading sheet data: ';
-                    
-                    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-                        errorMessage += 'Network error - please check your connection and try again.';
-                    } else if (error instanceof SyntaxError) {
-                        errorMessage += 'Invalid response from server - please try again.';
+                    // Check if the error is related to authentication
+                    if (error.message && (error.message.includes('expired') || error.message.includes('revoked'))) {
+                        authButton.style.display = 'block';
+                        authStatus.innerHTML = '<p class="text-danger">Your session has expired. Please re-authenticate.</p>';
+                        disableControls();
                     } else {
-                        errorMessage += error.message || 'Unknown error occurred';
+                        alert('Error loading sheet: ' + error);
                     }
-                    
-                    alert(errorMessage);
                 } finally {
-                    // Hide loading indicators
-                    const loadingSpinner = document.querySelector('.loading-spinner');
-                    if (loadingSpinner) loadingSpinner.style.display = 'none';
-                    document.getElementById('geminiProgress').style.display = 'none';
+                    hideLoading();
+                    if (!useTraditionalParser) {
+                        document.getElementById('geminiProgress').style.display = 'none';
+                    }
                 }
             }
 

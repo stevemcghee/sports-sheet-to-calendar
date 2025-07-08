@@ -2,7 +2,10 @@ import unittest
 import os
 from unittest.mock import patch, MagicMock
 from gemini_parser import parse_sheet_with_gemini, initialize_gemini
+from datetime_parser import parse_datetime_with_gemini, parse_datetime_range_with_gemini
 from dotenv import load_dotenv
+from datetime import datetime
+import pytz
 
 class TestGeminiParser(unittest.TestCase):
     def setUp(self):
@@ -26,6 +29,9 @@ class TestGeminiParser(unittest.TestCase):
                     "start": {
                         "dateTime": "2024-04-25T14:00:00"
                     },
+                    "end": {
+                        "dateTime": "2024-04-25T15:00:00"
+                    },
                     "location": "Main Gym",
                     "notes": "Home game"
                 },
@@ -34,6 +40,9 @@ class TestGeminiParser(unittest.TestCase):
                     "start": {
                         "dateTime": "2024-04-26T15:30:00"
                     },
+                    "end": {
+                        "dateTime": "2024-04-26T16:30:00"
+                    },
                     "location": "Field 2",
                     "notes": "Bring water"
                 },
@@ -41,6 +50,9 @@ class TestGeminiParser(unittest.TestCase):
                     "summary": "Track Meet",
                     "start": {
                         "dateTime": "2024-04-27T09:00:00"
+                    },
+                    "end": {
+                        "dateTime": "2024-04-27T10:00:00"
                     },
                     "location": "City Stadium",
                     "notes": "Bus leaves at 8:00"
@@ -57,6 +69,7 @@ class TestGeminiParser(unittest.TestCase):
         self.assertEqual(len(events), 3)
         self.assertEqual(events[0]['summary'], "Basketball Game")
         self.assertEqual(events[0]['start']['dateTime'], "2024-04-25T14:00:00")
+        self.assertEqual(events[0]['end']['dateTime'], "2024-04-25T15:00:00")
         self.assertEqual(events[0]['location'], "Main Gym")
         self.assertEqual(events[0]['notes'], "Home game")
 
@@ -104,12 +117,8 @@ class TestGeminiParser(unittest.TestCase):
         # Call the function
         events = parse_sheet_with_gemini(self.sample_data, model=mock_model)
 
-        # Verify the results
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]['summary'], "Basketball Game")
-        self.assertEqual(events[0]['start']['dateTime'], "2024-04-25T14:00:00")
-        self.assertNotIn('location', events[0])
-        self.assertNotIn('notes', events[0])
+        # Verify the results - events with missing required fields should be filtered out
+        self.assertEqual(len(events), 0)
 
     @unittest.skipIf(not os.getenv('GEMINI_API_KEY'), "Gemini API key not found")
     def test_parse_sheet_with_real_gemini_api(self):
@@ -316,6 +325,99 @@ class TestGeminiParser(unittest.TestCase):
                 
         except Exception as e:
             self.fail(f"Recurring events test failed: {str(e)}")
+
+    @unittest.skipIf(not os.getenv('GEMINI_API_KEY'), "Gemini API key not found")
+    def test_datetime_parser_integration(self):
+        """Test the integration of the new datetime parser with the existing codebase."""
+        load_dotenv()
+        
+        # Test data with various datetime formats
+        test_data = [
+            ["Event", "Date/Time", "Location"],
+            ["Morning Meeting", "next Monday 9am", "Room 101"],
+            ["Afternoon Workshop", "5/15/24 2:30 PM", "Room 102"],
+            ["Multi-day Conference", "May 20-22, 2024", "Room 103"],
+            ["Time Range Event", "6/1/24 10:00-12:00", "Room 104"],
+            ["Relative Date", "tomorrow 3pm", "Room 105"],
+            ["Date Only", "2024-07-15", "Room 106"],
+            ["Complex Format", "Aug 5 2pm - Aug 7 4pm 2024", "Room 107"]
+        ]
+
+        try:
+            # Test single datetime parsing
+            print("\nTesting single datetime parsing:")
+            for row in test_data[1:]:  # Skip header row
+                event_name = row[0]
+                datetime_str = row[1]
+                print(f"\nParsing datetime for {event_name}: {datetime_str}")
+                
+                parsed_dt = parse_datetime_with_gemini(datetime_str)
+                print(f"Parsed result: {parsed_dt}")
+                
+                # Validate the parsed datetime
+                dt = datetime.fromisoformat(parsed_dt)
+                self.assertIsNotNone(dt)
+                
+                # Verify timezone is US/Pacific
+                pacific = pytz.timezone('America/Los_Angeles')
+                self.assertEqual(dt.tzinfo, pacific)
+            
+            # Test datetime range parsing
+            print("\nTesting datetime range parsing:")
+            range_test_cases = [
+                "May 20-22, 2024",
+                "6/1/24 10:00-12:00",
+                "Aug 5 2pm - Aug 7 4pm 2024"
+            ]
+            
+            for range_str in range_test_cases:
+                print(f"\nParsing range: {range_str}")
+                start_dt, end_dt = parse_datetime_range_with_gemini(range_str)
+                print(f"Start: {start_dt}")
+                print(f"End: {end_dt}")
+                
+                # Validate the parsed datetimes
+                start = datetime.fromisoformat(start_dt)
+                end = datetime.fromisoformat(end_dt)
+                
+                self.assertIsNotNone(start)
+                self.assertIsNotNone(end)
+                self.assertGreater(end, start)
+                
+                # Verify timezone is US/Pacific
+                pacific = pytz.timezone('America/Los_Angeles')
+                self.assertEqual(start.tzinfo, pacific)
+                self.assertEqual(end.tzinfo, pacific)
+            
+            # Test integration with parse_sheet_with_gemini
+            print("\nTesting integration with parse_sheet_with_gemini:")
+            model = initialize_gemini()
+            events = parse_sheet_with_gemini(test_data, model=model)
+            
+            print("\nParsed Events:")
+            for event in events:
+                print(f"\nEvent: {event['summary']}")
+                print(f"Start: {event['start'].get('dateTime', 'N/A')}")
+                if 'end' in event:
+                    print(f"End: {event['end'].get('dateTime', 'N/A')}")
+                print(f"Location: {event.get('location', 'N/A')}")
+            
+            # Verify basic structure
+            self.assertIsInstance(events, list)
+            self.assertTrue(len(events) > 0)
+            
+            # Verify each event has required fields and valid datetime format
+            for event in events:
+                self.assertIn('summary', event)
+                self.assertIn('start', event)
+                self.assertIn('dateTime', event['start'])
+                
+                # Validate datetime format
+                dt = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
+                self.assertIsNotNone(dt)
+                
+        except Exception as e:
+            self.fail(f"Datetime parser integration test failed: {str(e)}")
 
 if __name__ == '__main__':
     unittest.main() 

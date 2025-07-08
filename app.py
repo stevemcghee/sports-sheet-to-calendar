@@ -50,7 +50,28 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY not found in environment variables")
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+
+# Configure safety settings
+safety_settings = [
+    {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_NONE",
+    },
+    {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_NONE",
+    },
+    {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE",
+    },
+    {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_NONE",
+    },
+]
+
+model = genai.GenerativeModel('models/gemini-1.5-pro-latest', safety_settings=safety_settings)
 
 # Initialize Google Calendar service
 def get_calendar_service():
@@ -98,27 +119,42 @@ def get_sheets_service():
         
         # Refresh token if needed
         if credentials.expired and credentials.refresh_token:
-            credentials.refresh(Request())
-            # Update session with new token
-            session['credentials'] = {
-                'token': credentials.token,
-                'refresh_token': credentials.refresh_token,
-                'token_uri': credentials.token_uri,
-                'client_id': credentials.client_id,
-                'client_secret': credentials.client_secret,
-                'scopes': credentials.scopes
-            }
+            try:
+                credentials.refresh(Request())
+                # Update session with new token
+                session['credentials'] = {
+                    'token': credentials.token,
+                    'refresh_token': credentials.refresh_token,
+                    'token_uri': credentials.token_uri,
+                    'client_id': credentials.client_id,
+                    'client_secret': credentials.client_secret,
+                    'scopes': credentials.scopes
+                }
+            except RefreshError as e:
+                logger.error(f"Failed to refresh credentials: {str(e)}")
+                # Clear invalid credentials from session
+                session.pop('credentials', None)
+                raise Exception("Your Google access token has expired. Please re-authenticate.")
         
         # Build and return the service
-        return build('sheets', 'v4', credentials=credentials)
+        service = build('sheets', 'v4', credentials=credentials)
+        return service
     except Exception as e:
         logger.error(f"Error getting sheets service: {str(e)}")
+        if 'invalid_grant' in str(e) or 'expired' in str(e) or 'revoked' in str(e):
+            # Clear invalid credentials from session
+            session.pop('credentials', None)
+            raise Exception("Your Google access token has expired or been revoked. Please re-authenticate.")
         raise
 
 @app.route('/')
 def index():
     try:
         logger.info("Rendering index page...")
+        # Check if credentials.json exists
+        if not os.path.exists('credentials.json'):
+            return redirect(url_for('setup_credentials'))
+            
         # Get spreadsheet ID from .env file
         spreadsheet_id = os.getenv('SPREADSHEET_ID')
         if not spreadsheet_id:
@@ -128,6 +164,33 @@ def index():
         logger.error(f"Error in index route: {str(e)}")
         logger.error(traceback.format_exc())
         return render_template('error.html', error_message=str(e)), 500
+
+@app.route('/setup', methods=['GET', 'POST'])
+def setup_credentials():
+    if request.method == 'POST':
+        try:
+            credentials_data = {
+                "installed": {
+                    "client_id": request.form.get('client_id'),
+                    "project_id": request.form.get('project_id'),
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_secret": request.form.get('client_secret'),
+                    "redirect_uris": ["http://localhost"]
+                }
+            }
+            
+            # Save credentials to file
+            with open('credentials.json', 'w') as f:
+                json.dump(credentials_data, f, indent=4)
+                
+            return redirect(url_for('index'))
+        except Exception as e:
+            logger.error(f"Error saving credentials: {str(e)}")
+            return render_template('setup.html', error=str(e))
+    
+    return render_template('setup.html')
 
 @app.route('/auth')
 def auth():
@@ -240,7 +303,7 @@ def load_sheet():
     try:
         # Check if user is authenticated
         if 'credentials' not in session:
-            return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+            return jsonify({'success': False, 'error': 'Not authenticated', 'needs_auth': True}), 401
 
         data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
@@ -250,83 +313,109 @@ def load_sheet():
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'}), 400
 
-        # Get the spreadsheet title
-        sheets_service = get_sheets_service()
         try:
-            spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-            spreadsheet_title = spreadsheet.get('properties', {}).get('title', 'Untitled Spreadsheet')
-            
-            # Get available sheets if no sheet name is provided
-            if not sheet_name:
-                sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
-                if sheets:
-                    sheet_name = sheets[0]  # Default to first sheet
-                else:
-                    return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'}), 400
-            else:
-                # Verify the requested sheet exists
-                sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
-                if sheet_name not in sheets:
-                    return jsonify({
-                        'success': False, 
-                        'error': f'Sheet "{sheet_name}" not found',
-                        'available_sheets': sheets
-                    }), 400
-        except HttpError as e:
-            if e.resp.status == 404:
-                return jsonify({'success': False, 'error': 'Spreadsheet not found'}), 404
-            return jsonify({'success': False, 'error': f'Error accessing spreadsheet: {str(e)}'}), 500
-
-        # Get the sheet data
-        range_name = f'{sheet_name}!A:Z'  # Get all columns
-        result = sheets_service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id,
-            range=range_name
-        ).execute()
-        values = result.get('values', [])
-
-        if not values:
-            return jsonify({
-                'success': True,
-                'spreadsheet_title': spreadsheet_title,
-                'events': [],
-                'message': 'No data found in sheet'
-            })
-
-        # Parse the events
-        try:
-            if use_traditional_parser:
-                events = parse_sports_events(values, sheet_name)
-            else:
-                events = parse_sheet_with_gemini(values)
+            # Get the spreadsheet title
+            sheets_service = get_sheets_service()
+            try:
+                spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+                spreadsheet_title = spreadsheet.get('properties', {}).get('title', 'Untitled Spreadsheet')
                 
-            if not events:
+                # Get available sheets if no sheet name is provided
+                if not sheet_name:
+                    sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
+                    if sheets:
+                        sheet_name = sheets[0]  # Default to first sheet
+                    else:
+                        return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'}), 400
+                else:
+                    # Verify the requested sheet exists
+                    sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
+                    if sheet_name not in sheets:
+                        return jsonify({
+                            'success': False, 
+                            'error': f'Sheet "{sheet_name}" not found',
+                            'available_sheets': sheets
+                        }), 400
+            except HttpError as e:
+                if e.resp.status == 404:
+                    return jsonify({'success': False, 'error': 'Spreadsheet not found'}), 404
+                return jsonify({'success': False, 'error': f'Error accessing spreadsheet: {str(e)}'}), 500
+
+            # Get the sheet data
+            range_name = f'{sheet_name}!A:Z'  # Get all columns
+            result = sheets_service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name
+            ).execute()
+            values = result.get('values', [])
+
+            if not values:
                 return jsonify({
                     'success': True,
                     'spreadsheet_title': spreadsheet_title,
                     'events': [],
-                    'message': 'No events found in sheet',
-                    'parser_used': 'traditional' if use_traditional_parser else 'gemini'
+                    'message': 'No data found in sheet'
                 })
-                
-            return jsonify({
-                'success': True,
-                'spreadsheet_title': spreadsheet_title,
-                'events': events,
-                'parser_used': 'traditional' if use_traditional_parser else 'gemini'
-            })
+
+            # Parse the events
+            try:
+                if use_traditional_parser:
+                    events = parse_sports_events(values, sheet_name)
+                else:
+                    # Use Gemini parser
+                    events = parse_sheet_with_gemini(values)
+                    if not events:
+                        # If Gemini parser returns no events, try traditional parser as fallback
+                        logger.warning("Gemini parser returned no events, trying traditional parser")
+                        events = parse_sports_events(values, sheet_name)
+                    
+                if not events:
+                    return jsonify({
+                        'success': True,
+                        'spreadsheet_title': spreadsheet_title,
+                        'events': [],
+                        'message': 'No events found in sheet',
+                        'parser_used': 'traditional' if use_traditional_parser else 'gemini',
+                        'sheets': sheets
+                    })
+                    
+                return jsonify({
+                    'success': True,
+                    'spreadsheet_title': spreadsheet_title,
+                    'events': events,
+                    'parser_used': 'traditional' if use_traditional_parser else 'gemini',
+                    'sheets': sheets
+                })
+            except Exception as e:
+                logger.error(f"Error parsing events: {str(e)}")
+                logger.error(traceback.format_exc())
+                return jsonify({'success': False, 'error': f'Error parsing events: {str(e)}'}), 500
+
         except Exception as e:
-            error_message = str(e)
-            if not use_traditional_parser:
-                error_message = f"Gemini parser error: {error_message}. Try using the traditional parser instead."
-            return jsonify({
-                'success': False,
-                'error': error_message,
-                'parser_used': 'traditional' if use_traditional_parser else 'gemini'
-            }), 500
+            error_msg = str(e)
+            if 'invalid_grant' in error_msg or 'expired' in error_msg or 'revoked' in error_msg:
+                # Clear invalid credentials from session
+                session.pop('credentials', None)
+                return jsonify({
+                    'success': False, 
+                    'error': 'Your session has expired. Please re-authenticate.',
+                    'needs_auth': True
+                }), 401
+            raise
 
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        error_msg = str(e)
+        logger.error(f"Error in load_sheet route: {error_msg}")
+        logger.error(traceback.format_exc())
+        if 'invalid_grant' in error_msg or 'expired' in error_msg or 'revoked' in error_msg:
+            # Clear invalid credentials from session
+            session.pop('credentials', None)
+            return jsonify({
+                'success': False, 
+                'error': 'Your session has expired. Please re-authenticate.',
+                'needs_auth': True
+            }), 401
+        return jsonify({'success': False, 'error': error_msg}), 500
 
 @app.route('/preview_changes', methods=['POST'])
 def preview_changes():
