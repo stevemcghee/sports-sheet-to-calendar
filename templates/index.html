@@ -699,6 +699,7 @@
                             // Show loading state on active tab
                             const originalText = btn.textContent;
                             btn.disabled = true;
+                            btn.setAttribute('data-original-text', originalText);
                             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
                         }
                     });
@@ -787,11 +788,11 @@
                     
                     // Restore button states
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        if (btn.textContent.includes('spinner-border')) {
-                            // Extract original text (remove spinner and restore)
-                            const originalText = btn.textContent.replace(/<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"><\/span>/, '').trim();
+                        if (btn.hasAttribute('data-original-text')) {
+                            const originalText = btn.getAttribute('data-original-text');
                             btn.disabled = false;
                             btn.innerHTML = originalText;
+                            btn.removeAttribute('data-original-text');
                         }
                     });
                 }
@@ -810,6 +811,7 @@
                             // Show loading state on ALL button
                             const originalText = btn.textContent;
                             btn.disabled = true;
+                            btn.setAttribute('data-original-text', originalText);
                             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
                         }
                     });
@@ -863,11 +865,11 @@
                     
                     // Restore button states
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        if (btn.textContent.includes('spinner-border')) {
-                            // Extract original text (remove spinner and restore)
-                            const originalText = btn.textContent.replace(/<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"><\/span>/, '').trim();
+                        if (btn.hasAttribute('data-original-text')) {
+                            const originalText = btn.getAttribute('data-original-text');
                             btn.disabled = false;
                             btn.innerHTML = originalText;
+                            btn.removeAttribute('data-original-text');
                         }
                     });
                 }

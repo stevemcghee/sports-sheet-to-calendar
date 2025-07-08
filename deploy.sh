@@ -1,53 +1,43 @@
 #!/bin/bash
 
-# Exit on error
-set -e
+echo "🚀 Deploying Google Calendar Sync App..."
 
-# Load environment variables
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+# Check if git is initialized
+if [ ! -d ".git" ]; then
+    echo "📁 Initializing git repository..."
+    git init
+    git add .
+    git commit -m "Initial commit"
 fi
 
-# Check if project ID is provided or available in environment
-if [ -z "$1" ]; then
-    if [ -z "$PROJECT_ID" ]; then
-        echo "Usage: ./deploy.sh <PROJECT_ID> or set PROJECT_ID in .env"
-        exit 1
-    fi
-    PROJECT_ID=$PROJECT_ID
-else
-    PROJECT_ID=$1
+# Check if remote exists
+if ! git remote get-url origin > /dev/null 2>&1; then
+    echo "❌ No remote repository found!"
+    echo "Please create a GitHub repository and add it as origin:"
+    echo "git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git"
+    exit 1
 fi
 
-# Enable required APIs
-echo "Enabling required APIs..."
-gcloud services enable \
-    cloudbuild.googleapis.com \
-    run.googleapis.com \
-    cloudscheduler.googleapis.com \
-    --project=$PROJECT_ID
+# Push to GitHub
+echo "📤 Pushing to GitHub..."
+git add .
+git commit -m "Update for deployment"
+git push origin main
 
-# Set up environment variables
-echo "Setting up environment variables..."
-gcloud secrets create calendar-credentials --project=$PROJECT_ID --data-file=credentials.json
-
-# Deploy using Cloud Build
-echo "Deploying to Cloud Run..."
-gcloud builds submit \
-    --project=$PROJECT_ID \
-    --config=cloudbuild.yaml \
-    --substitutions=_SPREADSHEET_ID="$SPREADSHEET_ID",_CALENDAR_NAME="$CALENDAR_NAME",_PROJECT_ID=$PROJECT_ID,_REGION="$REGION",_TIMEZONE="$TIMEZONE"
-
-# Create Cloud Scheduler job
-echo "Setting up Cloud Scheduler job..."
-gcloud scheduler jobs create http calendar-sync-job \
-    --project=$PROJECT_ID \
-    --schedule="0 0 * * *" \
-    --time-zone="$TIMEZONE" \
-    --uri="https://calendar-sync-$PROJECT_ID.run.app" \
-    --http-method=POST \
-    --headers="Content-Type=application/json" \
-    --body="{}"
-
-echo "Deployment complete!"
-echo "The calendar sync will run daily at midnight $TIMEZONE time." 
+echo "✅ Code pushed to GitHub!"
+echo ""
+echo "🌐 To deploy on Render:"
+echo "1. Go to https://render.com"
+echo "2. Sign up/Login with GitHub"
+echo "3. Click 'New Web Service'"
+echo "4. Connect your GitHub repository"
+echo "5. Set build command: pip install -r requirements.txt"
+echo "6. Set start command: gunicorn app:app"
+echo "7. Click 'Create Web Service'"
+echo ""
+echo "🔧 Environment Variables to set in Render:"
+echo "- GOOGLE_CLIENT_ID: Your Google OAuth client ID"
+echo "- GOOGLE_CLIENT_SECRET: Your Google OAuth client secret"
+echo "- FLASK_SECRET_KEY: A random secret key for Flask"
+echo ""
+echo "🎉 Your app will be live at: https://your-app-name.onrender.com" 
