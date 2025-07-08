@@ -734,6 +734,96 @@ def delete_all_events(service, calendar_id):
         logger.error(f"Error deleting events: {str(e)}")
         raise
 
+def validate_event_times(event):
+    """Validate that an event has valid start and end times."""
+    try:
+        start = event.get('start', {})
+        end = event.get('end', {})
+        
+        # Check if both start and end are present
+        if not start or not end:
+            return False, "Missing start or end time"
+            
+        # Check if both are dictionaries
+        if not isinstance(start, dict) or not isinstance(end, dict):
+            return False, "Start and end must be dictionaries"
+            
+        # Get start time/date
+        start_time = None
+        if 'dateTime' in start:
+            start_time = start['dateTime']
+        elif 'date' in start:
+            start_time = start['date']
+        else:
+            return False, "Start time missing dateTime or date"
+            
+        # Get end time/date
+        end_time = None
+        if 'dateTime' in end:
+            end_time = end['dateTime']
+        elif 'date' in end:
+            end_time = end['date']
+        else:
+            return False, "End time missing dateTime or date"
+            
+        # For datetime events, check that end is after start
+        if 'dateTime' in start and 'dateTime' in end:
+            from datetime import datetime
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                if end_dt <= start_dt:
+                    return False, f"End time ({end_time}) must be after start time ({start_time})"
+            except ValueError as e:
+                return False, f"Invalid datetime format: {str(e)}"
+                
+        # For date events, check that end is after or equal to start
+        elif 'date' in start and 'date' in end:
+            if end_time < start_time:
+                return False, f"End date ({end_time}) must be after or equal to start date ({start_time})"
+                
+        return True, "Valid"
+        
+    except Exception as e:
+        return False, f"Error validating times: {str(e)}"
+
+def fix_event_times(event):
+    """Attempt to fix common time issues in events."""
+    try:
+        start = event.get('start', {})
+        end = event.get('end', {})
+        
+        # Only fix datetime events
+        if 'dateTime' in start and 'dateTime' in end:
+            from datetime import datetime, timedelta
+            
+            start_time = start['dateTime']
+            end_time = end['dateTime']
+            
+            # Parse times
+            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            
+            # If end is before or equal to start, fix it
+            if end_dt <= start_dt:
+                # Add 1 hour to end time if it's the same as start
+                if end_dt == start_dt:
+                    end_dt = start_dt + timedelta(hours=1)
+                else:
+                    # If end is before start, swap them
+                    start_dt, end_dt = end_dt, start_dt
+                
+                # Update the event
+                start['dateTime'] = start_dt.isoformat()
+                end['dateTime'] = end_dt.isoformat()
+                
+                return True, f"Fixed time range: {start_time} -> {start['dateTime']}, {end_time} -> {end['dateTime']}"
+        
+        return False, "No fixes needed"
+        
+    except Exception as e:
+        return False, f"Error fixing times: {str(e)}"
+
 def get_event_key(event):
     """Generate a unique key for an event based on its start/end times and summary."""
     start = event.get('start', {})
@@ -925,10 +1015,31 @@ def update_calendar(service, events, calendar_id):
                     
                 # Check for either dateTime or date fields (handle both timed and all-day events)
                 if ('dateTime' not in event['start'] and 'date' not in event['start']) or ('dateTime' not in event['end'] and 'date' not in event['end']):
-                    logger.error(f"Event missing dateTime or date in start/end: {event}")
+                    logger.error(f"❌ Event missing dateTime or date in start/end: {event}")
                     logger.error(f"Start: {event['start']}")
                     logger.error(f"End: {event['end']}")
                     continue
+                
+                # Validate event times
+                is_valid, error_msg = validate_event_times(event)
+                if not is_valid:
+                    logger.warning(f"⚠️ Invalid event times for '{event.get('summary', 'Unknown')}': {error_msg}")
+                    logger.warning(f"Attempting to fix time issues...")
+                    
+                    # Try to fix the time issues
+                    fixed, fix_msg = fix_event_times(event)
+                    if fixed:
+                        logger.info(f"🔧 Fixed event times: {fix_msg}")
+                        # Re-validate after fixing
+                        is_valid, error_msg = validate_event_times(event)
+                        if not is_valid:
+                            logger.error(f"❌ Still invalid after fixing: {error_msg}")
+                            logger.error(f"Event data: {event}")
+                            continue
+                    else:
+                        logger.error(f"❌ Could not fix time issues: {fix_msg}")
+                        logger.error(f"Event data: {event}")
+                        continue
                 
                 event_key = get_event_key(event)
                 logger.debug(f"Generated event key: {event_key}")
@@ -983,13 +1094,34 @@ def update_calendar(service, events, calendar_id):
                 logger.info(f"Inserting event {i+1}/{len(events_to_insert)}: {event['summary']}")
                 logger.debug(f"Event details: {event}")
                 
+                # Validate event times before inserting
+                is_valid, error_msg = validate_event_times(event)
+                if not is_valid:
+                    logger.warning(f"⚠️ Invalid event times for '{event.get('summary', 'Unknown')}': {error_msg}")
+                    logger.warning(f"Attempting to fix time issues...")
+                    
+                    # Try to fix the time issues
+                    fixed, fix_msg = fix_event_times(event)
+                    if fixed:
+                        logger.info(f"🔧 Fixed event times: {fix_msg}")
+                        # Re-validate after fixing
+                        is_valid, error_msg = validate_event_times(event)
+                        if not is_valid:
+                            logger.error(f"❌ Still invalid after fixing: {error_msg}")
+                            logger.error(f"Event data: {event}")
+                            continue
+                    else:
+                        logger.error(f"❌ Could not fix time issues: {fix_msg}")
+                        logger.error(f"Event data: {event}")
+                        continue
+                
                 # Insert the event
                 result = service.events().insert(calendarId=calendar_id, body=event).execute()
-                logger.info(f"Successfully inserted event: {result.get('id', 'unknown')}")
+                logger.info(f"✅ Successfully inserted event: {result.get('id', 'unknown')}")
                 logger.debug(f"Insert result: {result}")
                 
             except Exception as e:
-                logger.error(f"Error inserting event {i+1}: {str(e)}")
+                logger.error(f"❌ Error inserting event {i+1}: {str(e)}")
                 logger.error(f"Event data: {event}")
                 logger.error(traceback.format_exc())
         
@@ -1007,6 +1139,9 @@ def update_calendar(service, events, calendar_id):
         
         logger.info("Calendar update completed successfully")
         logger.info(f"Summary: Inserted {len(events_to_insert)} events, Updated {len(events_to_change)} events, Deleted {len(events_to_delete)} events")
+        
+        # Return the counts for tracking
+        return len(events_to_delete), len(events_to_insert), len(events_to_change)
         
     except Exception as e:
         logger.error(f"Error in update_calendar: {str(e)}")

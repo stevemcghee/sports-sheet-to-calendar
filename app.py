@@ -601,7 +601,7 @@ def apply_changes():
         logger.info("Starting apply_changes route")
         logger.info("TEST LOG: This should appear in debug logs")
         service = get_calendar_service()
-        calendar_name = f"{sheet_name} Calendar"
+        calendar_name = f"SLOHS {sheet_name}"
         logger.info(f"Using calendar name: {calendar_name}")
         
         calendar_id = create_or_get_sports_calendar(service, calendar_name)
@@ -769,6 +769,177 @@ def apply_changes():
         })
     except Exception as e:
         logger.error(f"Error in apply_changes: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'debug_logs': capture_handler.logs
+        }), 400
+    finally:
+        # Remove the handler to avoid duplicate logs
+        logger.removeHandler(capture_handler)
+
+@app.route('/apply_all_sheets', methods=['POST'])
+def apply_all_sheets():
+    """Apply changes to all sheets at once."""
+    # Set up log capture
+    class CaptureLogHandler(logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.logs = []
+        
+        def emit(self, record):
+            log_entry = self.format(record)
+            self.logs.append(log_entry)
+    
+    capture_handler = CaptureLogHandler()
+    capture_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    capture_handler.setFormatter(formatter)
+    
+    # Add the handler to the logger
+    logger.addHandler(capture_handler)
+    
+    try:
+        data = request.get_json()
+        spreadsheet_id = data.get('spreadsheet_id')
+        use_traditional_parser = data.get('use_traditional_parser', False)
+
+        if not spreadsheet_id:
+            return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
+
+        logger.info("Starting apply_all_sheets route")
+        service = get_calendar_service()
+        
+        # Get credentials for sheets service
+        credentials = Credentials(**session['credentials'])
+        sheets_service = build('sheets', 'v4', credentials=credentials)
+        
+        # Get all available sheets
+        logger.info("Getting all available sheets")
+        available_sheets = list_available_sheets(sheets_service, spreadsheet_id)
+        
+        if not available_sheets:
+            return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'})
+        
+        logger.info(f"Found {len(available_sheets)} sheets: {available_sheets}")
+        
+        # Track results for each sheet
+        sheet_results = {}
+        total_events_created = 0
+        total_events_updated = 0
+        total_events_deleted = 0
+        
+        # Process each sheet
+        for sheet_name in available_sheets:
+            logger.info(f"Processing sheet: {sheet_name}")
+            
+            try:
+                # Get sheet data
+                values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
+                if not values:
+                    logger.warning(f"No data found in sheet: {sheet_name}")
+                    sheet_results[sheet_name] = {
+                        'success': False,
+                        'error': 'No data found in sheet',
+                        'events_created': 0,
+                        'events_updated': 0,
+                        'events_deleted': 0
+                    }
+                    continue
+                
+                # Parse events
+                if use_traditional_parser:
+                    logger.info(f"Using traditional parser for {sheet_name}")
+                    events = parse_sports_events(values, sheet_name)
+                else:
+                    logger.info(f"Using Gemini parser for {sheet_name}")
+                    try:
+                        events = parse_sheet_with_gemini(values)
+                        if not events:
+                            logger.warning(f"Gemini parser returned no events for {sheet_name}, falling back to traditional parser")
+                            events = parse_sports_events(values, sheet_name)
+                    except Exception as e:
+                        logger.error(f"Error using Gemini parser for {sheet_name}: {str(e)}")
+                        logger.info(f"Falling back to traditional parser for {sheet_name}")
+                        events = parse_sports_events(values, sheet_name)
+                
+                if not events:
+                    logger.warning(f"No events found in sheet: {sheet_name}")
+                    sheet_results[sheet_name] = {
+                        'success': True,
+                        'events_created': 0,
+                        'events_updated': 0,
+                        'events_deleted': 0,
+                        'message': 'No events found in sheet'
+                    }
+                    continue
+                
+                # Create or get calendar for this sheet
+                calendar_name = f"SLOHS {sheet_name}"
+                calendar_id = create_or_get_sports_calendar(service, calendar_name)
+                
+                # Update calendar with events
+                logger.info(f"Updating calendar for {sheet_name} with {len(events)} events")
+                deleted, inserted, changed = update_calendar(service, events, calendar_id)
+                
+                # Track results
+                sheet_results[sheet_name] = {
+                    'success': True,
+                    'events_created': inserted,
+                    'events_updated': changed,
+                    'events_deleted': deleted,
+                    'total_events': len(events)
+                }
+                
+                total_events_created += inserted
+                total_events_updated += changed
+                total_events_deleted += deleted
+                
+                logger.info(f"Successfully processed {sheet_name}: {inserted} created, {changed} updated, {deleted} deleted")
+                
+            except Exception as e:
+                logger.error(f"❌ Error processing sheet {sheet_name}: {str(e)}")
+                logger.error(traceback.format_exc())
+                
+                # Provide more detailed error information
+                error_details = str(e)
+                if "timeRangeEmpty" in error_details:
+                    error_details = "Invalid event times detected. Some events have end times before start times."
+                elif "HttpError" in error_details:
+                    error_details = f"Google Calendar API error: {error_details}"
+                
+                sheet_results[sheet_name] = {
+                    'success': False,
+                    'error': error_details,
+                    'events_created': 0,
+                    'events_updated': 0,
+                    'events_deleted': 0
+                }
+        
+        # Prepare summary
+        successful_sheets = [name for name, result in sheet_results.items() if result['success']]
+        failed_sheets = [name for name, result in sheet_results.items() if not result['success']]
+        
+        logger.info(f"Bulk operation completed. Successful sheets: {len(successful_sheets)}, Failed sheets: {len(failed_sheets)}")
+        logger.info(f"Total events created: {total_events_created}, updated: {total_events_updated}, deleted: {total_events_deleted}")
+        
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_sheets': len(available_sheets),
+                'successful_sheets': len(successful_sheets),
+                'failed_sheets': len(failed_sheets),
+                'total_events_created': total_events_created,
+                'total_events_updated': total_events_updated,
+                'total_events_deleted': total_events_deleted
+            },
+            'sheet_results': sheet_results,
+            'debug_logs': capture_handler.logs
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in apply_all_sheets: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({
             'success': False,

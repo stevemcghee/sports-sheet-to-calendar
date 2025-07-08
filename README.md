@@ -1,113 +1,128 @@
 # SLOHS Sports Calendar Sync
 
-This script syncs sports events from a Google Spreadsheet to Google Calendars, creating both a main combined calendar and individual sport-specific calendars.
+A comprehensive Google Calendar synchronization system that syncs sports events from Google Spreadsheets to Google Calendars, featuring both a web-based admin interface and command-line tools.
 
 ## Features
 
-- Syncs sports events from Google Sheets to Google Calendar
-- Creates a main combined calendar for all sports
-- Creates individual sport-specific calendars
-- Smart sport name handling (uses sport name from spreadsheet or falls back to sheet name)
-- Handles both single-day and multi-day events
-- Supports various time formats and special cases
-- Makes all calendars public by default
-- Provides detailed logging and error handling
+- **Web-based Admin Interface**: Interactive web application for easy calendar management
+- **Dual Parser System**: Choose between traditional parsing or Gemini AI-powered parsing
+- **Multiple Calendar Support**: Creates both a main combined calendar and individual sport-specific calendars
+- **Smart Sport Name Handling**: Uses sport name from spreadsheet or falls back to sheet name
+- **Flexible Event Handling**: Supports both single-day and multi-day events
+- **Advanced Time Parsing**: Handles various time formats and special cases
+- **Public Calendar Support**: Makes all calendars public by default
+- **Comprehensive Logging**: Detailed logging and error handling
+- **Bulk Operations**: Process all sheets at once with the "APPLY ALL" feature
 
-## Web-based Admin Interface
+## Quick Start
 
-The application includes a web-based admin interface for easy management of calendar syncs:
+### Option 1: Web Interface (Recommended)
 
-- **Interactive Event Preview**: View and verify events before syncing
-- **Parser Selection**: Choose between Gemini AI parser (default) or traditional parser
-- **Real-time Updates**: See changes in real-time as they're applied
-- **Error Handling**: Clear error messages and automatic fallback options
-- **Authentication**: Secure Google OAuth2 authentication
-- **Responsive Design**: Works on desktop and mobile devices
+1. **Start the web application**:
+   ```bash
+   python app.py
+   ```
+   
+   **Note**: If port 5000 is in use (common on macOS due to AirPlay), the app will automatically try alternative ports or you can specify a different port:
+   ```bash
+   python app.py --port 5001
+   ```
 
-To start the admin interface:
-```bash
-python app.py
-```
+2. **Access the interface**: Open your browser to `http://localhost:5000` (or the port shown in the console)
 
-The interface will be available at `http://localhost:5000`. You'll need to:
-1. Authenticate with your Google account
-2. Enter the spreadsheet ID and sheet name
-3. Choose your preferred parser (Gemini or traditional)
-4. Preview and confirm the changes
-5. Apply the sync to your calendars
+3. **Authenticate**: Click "Authenticate with Google" to grant access to your Google account
 
-## Setup
+4. **Configure and sync**:
+   - Enter your spreadsheet ID
+   - Select the sheet to process
+   - Choose your preferred parser (Gemini AI or traditional)
+   - Preview events before applying
+   - Apply changes to your calendars
 
-1. Clone this repository:
-```bash
-git clone <repository-url>
-cd google_calendar_sync
-```
+### Option 2: Command Line
 
-2. Create and activate a virtual environment:
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+For automated or batch processing:
 
-3. Install required packages:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up Google Cloud Project:
-   - Create a new project in [Google Cloud Console](https://console.cloud.google.com)
-   - Enable the following APIs:
-     - Google Sheets API
-     - Google Calendar API
-     - Cloud Run API
-     - Cloud Build API
-     - Cloud Scheduler API
-
-5. Set up Google OAuth 2.0 credentials:
-   - Go to [Google Cloud Console](https://console.cloud.google.com)
-   - Navigate to APIs & Services > Credentials
-   - Create OAuth 2.0 Client ID credentials
-   - Download the credentials and save as `credentials.json` in the project directory
-
-6. Configure environment variables:
-   - Copy `.env.example` to `.env`
-   - Update the following variables in `.env`:
-     ```
-     SPREADSHEET_ID=your_spreadsheet_id
-     CALENDAR_NAME=SLOHS Sports
-     PROJECT_ID=your_project_id
-     REGION=us-central1
-     TIMEZONE=America/Los_Angeles
-     ```
-
-## First Run
-
-1. Run the script:
 ```bash
 python calendar_sync.py
 ```
 
-2. The first time you run the script, it will:
-   - Open a browser window for Google OAuth authentication
-   - Create the main sports calendar if it doesn't exist
-   - Create individual sport calendars if they don't exist
-   - Delete all existing events from the calendars
-   - Process each sheet in the spreadsheet
-   - Create events in both the main and sport-specific calendars
+## Web Interface Features
 
-3. The script will display a summary of:
-   - Total number of sports processed
-   - Total number of events created
-   - Number of events per sport
+### Interactive Event Preview
+- View and verify events before syncing
+- See exactly what will be created, updated, or deleted
+- Real-time validation of event data
+
+### Parser Selection
+- **Gemini AI Parser**: Advanced AI-powered parsing for complex spreadsheet formats
+- **Traditional Parser**: Reliable parsing for standard formats
+- Automatic fallback if one parser fails
+
+### Bulk Operations
+- **ALL Button**: Loads and previews all sheets combined
+- **APPLY ALL Button**: Creates calendar entries for all sheets simultaneously
+- Detailed summary of processing results
+
+### Authentication & Security
+- Secure Google OAuth2 authentication
+- Session management with automatic token refresh
+- Environment variable support for production deployment
+
+## Setup
+
+### 1. Clone and Install
+
+```bash
+git clone <repository-url>
+cd google_calendar_sync
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2. Google Cloud Project Setup
+
+1. Create a new project in [Google Cloud Console](https://console.cloud.google.com)
+2. Enable the following APIs:
+   - Google Sheets API
+   - Google Calendar API
+   - Cloud Run API (for GCP deployment)
+   - Cloud Build API (for GCP deployment)
+   - Cloud Scheduler API (for GCP deployment)
+
+### 3. OAuth Credentials Setup
+
+#### Option A: Environment Variables (Recommended for Production)
+Set these environment variables:
+```bash
+export GOOGLE_CLIENT_ID=your_google_oauth_client_id
+export GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+export GOOGLE_PROJECT_ID=your_google_cloud_project_id
+export FLASK_SECRET_KEY=your_generated_secret_key
+export GEMINI_API_KEY=your_gemini_api_key  # Optional, for AI parsing
+```
+
+#### Option B: Credentials File (Development)
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Navigate to APIs & Services > Credentials
+3. Create OAuth 2.0 Client ID credentials
+4. Download the credentials and save as `credentials.json` in the project directory
+
+### 4. Optional: Gemini AI Setup
+For AI-powered parsing:
+1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Create an API key
+3. Set the `GEMINI_API_KEY` environment variable
 
 ## Spreadsheet Format
 
-The Google Spreadsheet should have the following structure:
-- Each sheet represents a different sport
-- First row: Sport name (or sheet name will be used as fallback)
-- Second row: Headers
-- Subsequent rows: Event data with columns:
+The Google Spreadsheet should follow this structure:
+
+### Traditional Parser Format
+- **First row**: Sport name (or sheet name will be used as fallback)
+- **Second row**: Headers
+- **Subsequent rows**: Event data with columns:
   - Date (MM/DD or MM/DD/YYYY)
   - Opponent
   - Location
@@ -116,72 +131,103 @@ The Google Spreadsheet should have the following structure:
   - Release Time (optional)
   - Departure Time (optional)
 
-## Testing
+### Gemini AI Parser Format
+- **First row**: Sport name
+- **Second row**: Column headers
+- **Subsequent rows**: Event data with columns:
+  - Start Datetime (required)
+  - Event (required)
+  - Location (required)
+  - End Datetime (optional)
+  - Recurrence (optional)
 
-The script includes comprehensive tests for:
-- Event parsing
-- Date and time handling
-- Calendar management
-- Error cases and edge conditions
+## Deployment Options
 
-Run the tests with:
-```bash
-python -m unittest test_calendar_sync.py -v
-```
+### Option 1: Render (Recommended for Web Interface)
 
-## Error Handling
+1. **Push to GitHub**:
+   ```bash
+   ./deploy.sh
+   ```
 
-The script includes robust error handling for:
-- Invalid dates and times
-- Missing or malformed data
-- API errors
-- Empty sport names (falls back to sheet name)
-- Network issues
+2. **Deploy on Render**:
+   - Go to [Render](https://render.com)
+   - Sign up/Login with GitHub
+   - Click 'New Web Service'
+   - Connect your GitHub repository
+   - Set build command: `pip install -r requirements.txt`
+   - Set start command: `gunicorn app:app`
+   - Add environment variables (see `render_env_setup.md`)
 
-All errors are logged to `out.log` for debugging.
+### Option 2: Google Cloud Platform
 
-## Deployment
+For automated deployment with Cloud Scheduler:
 
-The application can be deployed to Google Cloud Platform to run automatically:
-
-1. Install the Google Cloud SDK and authenticate:
-```bash
-gcloud auth login
-```
-
-2. Make the deployment script executable:
 ```bash
 chmod +x deploy.sh
-```
-
-3. Run the deployment script:
-```bash
 ./deploy.sh [PROJECT_ID]
 ```
 
-The deployment script will:
+This will:
 - Enable required Google Cloud APIs
 - Store credentials securely in Secret Manager
 - Build and deploy the container to Cloud Run
 - Set up a daily Cloud Scheduler job
 
-The calendar sync will run automatically every day at midnight in the configured timezone.
+## Environment Variables
 
-### Deployment Files
+### Required for Web Interface
+- `GOOGLE_CLIENT_ID`: Your Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET`: Your Google OAuth client secret
+- `FLASK_SECRET_KEY`: A random secret key for Flask sessions
 
-- `Dockerfile`: Defines the container image for the application
-- `cloudbuild.yaml`: Configures the Cloud Build process
-- `deploy.sh`: Automation script for deployment
-- `.env`: Configuration file (not committed to version control)
+### Optional
+- `SPREADSHEET_ID`: Default spreadsheet ID
+- `GEMINI_API_KEY`: For AI-powered parsing
+- `GOOGLE_PROJECT_ID`: For GCP deployment
 
-### Environment Variables
+## Testing
 
-The following environment variables are required for deployment:
-- `SPREADSHEET_ID`: Google Sheets ID containing sports events
-- `CALENDAR_NAME`: Name for the main sports calendar
-- `PROJECT_ID`: Google Cloud project ID
-- `REGION`: Google Cloud region (default: us-central1)
-- `TIMEZONE`: Timezone for calendar events (default: America/Los_Angeles)
+Run the comprehensive test suite:
+
+```bash
+# All tests
+python -m pytest
+
+# Specific test files
+python -m unittest test_calendar_sync.py -v
+python -m unittest test_gemini_parser.py -v
+python -m unittest test_datetime_parser.py -v
+```
+
+## Error Handling
+
+The system includes robust error handling for:
+- Invalid dates and times
+- Missing or malformed data
+- API errors and rate limits
+- Network connectivity issues
+- Authentication token expiration
+- Parser failures with automatic fallback
+
+All errors are logged to `app.log` and `calendar_sync.log` for debugging.
+
+## Troubleshooting
+
+### Port 5000 Already in Use
+If you see "Address already in use" on macOS:
+1. **Option 1**: Disable AirPlay Receiver in System Preferences > General > AirDrop & Handoff
+2. **Option 2**: Use a different port: `python app.py --port 5001`
+
+### Authentication Issues
+- Clear browser cookies and try again
+- Check that your OAuth credentials are correctly configured
+- Verify the redirect URIs include both localhost and your production domain
+
+### Parser Issues
+- Try switching between Gemini AI and traditional parser
+- Check the debug logs for specific error messages
+- Verify your spreadsheet format matches the expected structure
 
 ## Contributing
 

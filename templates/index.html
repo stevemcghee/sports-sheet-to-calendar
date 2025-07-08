@@ -214,6 +214,7 @@
                 <h5 class="card-title">Load Spreadsheet</h5>
                 <div id="spreadsheetInfo" class="alert alert-info mb-3" style="display: none;">
                     <strong>Current Spreadsheet:</strong> <span id="spreadsheetTitle"></span>
+                    <div class="fw-bold mb-2" id="individualCalendarsLabel" style="font-size: 1.1rem;">Generate Individual Sports Calendars</div>
                     <div id="sheetTabs" class="mt-2" style="display: none;">
                         <div class="btn-group" role="group" aria-label="Sheet tabs">
                             <!-- Tabs will be added here dynamically -->
@@ -242,6 +243,7 @@
         <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Sheet Preview</h5>
+                <div id="currentSheetName" class="mb-2 fw-bold text-primary" style="font-size: 1.1rem;"></div>
                 <div id="sheetPreview" class="sheet-preview">
                     <div class="loading-spinner">
                         <div class="spinner-border text-primary" role="status">
@@ -363,6 +365,19 @@
             function logError(message) { log('error', message); }
             function logDebug(message) { log('debug', message); }
 
+            // Helper functions to parse server logs
+            function parseLogLevel(logEntry) {
+                // Server logs are in format: "2025-01-08 16:30:45,123 - INFO - message"
+                const match = logEntry.match(/\s-\s(\w+)\s-/);
+                return match ? match[1] : 'DEBUG';
+            }
+
+            function extractLogMessage(logEntry) {
+                // Extract the message part after the log level
+                const match = logEntry.match(/\s-\s\w+\s-\s(.+)/);
+                return match ? match[1] : logEntry;
+            }
+
             // Initialize current time display
             function updateCurrentTime() {
                 const currentTimeEl = document.getElementById('currentTime');
@@ -460,15 +475,7 @@
                             // Create tab buttons
                             sheetTabs.innerHTML = '';
                             
-                            // Add ALL button first
-                            const allButton = document.createElement('button');
-                            allButton.type = 'button';
-                            allButton.className = 'btn btn-outline-primary';
-                            allButton.textContent = 'ALL';
-                            allButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
-                            sheetTabs.appendChild(allButton);
-                            
-                            // Add individual sheet buttons
+                            // Add individual sheet buttons first
                             data.sheets.forEach((sheet, index) => {
                                 const button = document.createElement('button');
                                 button.type = 'button';
@@ -478,10 +485,35 @@
                                 button.onclick = () => loadSheetData(spreadsheetId, sheet, useTraditionalParser);
                                 sheetTabs.appendChild(button);
                             });
+                            
+                            // Add Master Calendar button at the end
+                            const masterButton = document.createElement('button');
+                            masterButton.type = 'button';
+                            masterButton.className = 'btn btn-outline-primary';
+                            masterButton.textContent = 'Master Calendar';
+                            masterButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
+                            sheetTabs.appendChild(masterButton);
+                            
+                            // Create a separate row for the Generate All Calendars button
+                            const generateAllRow = document.createElement('div');
+                            generateAllRow.className = 'row mt-3';
+                            generateAllRow.innerHTML = `
+                                <div class="col-12">
+                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', ${JSON.stringify(data.sheets)}, ${useTraditionalParser})">
+                                        <i class="bi bi-calendar-plus"></i>
+                                        Generate All Calendars
+                                    </button>
+                                </div>
+                            `;
+                            
+                            // Insert the new row after the sheet tabs
+                            sheetTabs.parentNode.insertBefore(generateAllRow, sheetTabs.nextSibling);
+                            
                             sheetTabs.style.display = 'block';
                             
                             // Load first sheet by default
                             if (data.sheets.length > 0) {
+                                setCurrentSheetName(data.sheets[0]);
                                 logInfo(`Auto-loading first sheet: ${data.sheets[0]}`);
                                 loadSheetData(spreadsheetId, data.sheets[0], useTraditionalParser);
                             }
@@ -603,15 +635,7 @@
                             // Create tab buttons
                             sheetTabs.innerHTML = '';
                             
-                            // Add ALL button first
-                            const allButton = document.createElement('button');
-                            allButton.type = 'button';
-                            allButton.className = 'btn btn-outline-primary';
-                            allButton.textContent = 'ALL';
-                            allButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
-                            sheetTabs.appendChild(allButton);
-                            
-                            // Add individual sheet buttons
+                            // Add individual sheet buttons first
                             data.sheets.forEach((sheet, index) => {
                                 const button = document.createElement('button');
                                 button.type = 'button';
@@ -621,10 +645,35 @@
                                 button.onclick = () => loadSheetData(spreadsheetId, sheet, useTraditionalParser);
                                 sheetTabs.appendChild(button);
                             });
+                            
+                            // Add Master Calendar button at the end
+                            const masterButton = document.createElement('button');
+                            masterButton.type = 'button';
+                            masterButton.className = 'btn btn-outline-primary';
+                            masterButton.textContent = 'Master Calendar';
+                            masterButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
+                            sheetTabs.appendChild(masterButton);
+                            
+                            // Create a separate row for the Generate All Calendars button
+                            const generateAllRow = document.createElement('div');
+                            generateAllRow.className = 'row mt-3';
+                            generateAllRow.innerHTML = `
+                                <div class="col-12">
+                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', ${JSON.stringify(data.sheets)}, ${useTraditionalParser})">
+                                        <i class="bi bi-calendar-plus"></i>
+                                        Generate All Calendars
+                                    </button>
+                                </div>
+                            `;
+                            
+                            // Insert the new row after the sheet tabs
+                            sheetTabs.parentNode.insertBefore(generateAllRow, sheetTabs.nextSibling);
+                            
                             sheetTabs.style.display = 'block';
                             
                             // Load first sheet by default
                             if (data.sheets.length > 0) {
+                                setCurrentSheetName(data.sheets[0]);
                                 logInfo(`Auto-loading first sheet: ${data.sheets[0]}`);
                                 loadSheetData(spreadsheetId, data.sheets[0], useTraditionalParser);
                             }
@@ -734,9 +783,22 @@
                         
                         // Display debug logs if available
                         if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
                             data.debug_logs.forEach(log => {
-                                logDebug(log);
+                                // Parse the log level from the server log entry
+                                const logLevel = parseLogLevel(log);
+                                const logMessage = extractLogMessage(log);
+                                
+                                // Display with appropriate level
+                                if (logLevel === 'ERROR') {
+                                    logError(logMessage);
+                                } else if (logLevel === 'WARNING') {
+                                    logWarning(logMessage);
+                                } else if (logLevel === 'INFO') {
+                                    logInfo(logMessage);
+                                } else {
+                                    logDebug(logMessage);
+                                }
                             });
                         }
                         
@@ -747,12 +809,26 @@
                             logWarning('No events found in sheet data');
                             displayEvents([], data.spreadsheet_title);
                         }
+                        setCurrentSheetName(sheetName);
                     } else {
                         // Display debug logs if available (even in error case)
                         if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
                             data.debug_logs.forEach(log => {
-                                logDebug(log);
+                                // Parse the log level from the server log entry
+                                const logLevel = parseLogLevel(log);
+                                const logMessage = extractLogMessage(log);
+                                
+                                // Display with appropriate level
+                                if (logLevel === 'ERROR') {
+                                    logError(logMessage);
+                                } else if (logLevel === 'WARNING') {
+                                    logWarning(logMessage);
+                                } else if (logLevel === 'INFO') {
+                                    logInfo(logMessage);
+                                } else {
+                                    logDebug(logMessage);
+                                }
                             });
                         }
                         
@@ -856,6 +932,7 @@
 
                     // Display all events
                     displayEvents(allEvents, spreadsheetTitle);
+                    setCurrentSheetName('Master Calendar');
                 } catch (error) {
                     logError(`Exception in loadAllSheets: ${error}`);
                     alert('Error loading all sheets: ' + error);
@@ -872,6 +949,234 @@
                             btn.removeAttribute('data-original-text');
                         }
                     });
+                }
+            }
+
+            async function applyAllSheets(spreadsheetId, sheets, useTraditionalParser) {
+                logInfo(`🚀 Starting bulk apply operation for ${sheets.length} sheets`);
+                logInfo(`📋 Sheets to process: ${sheets.join(', ')}`);
+                logInfo(`🔧 Parser mode: ${useTraditionalParser ? 'Traditional' : 'Gemini AI'}`);
+                
+                // Confirm with user
+                const confirmed = confirm(`This will create calendar entries for ALL ${sheets.length} sheets at once. This may take several minutes. Continue?`);
+                if (!confirmed) {
+                    logInfo('❌ User cancelled bulk apply operation');
+                    return;
+                }
+                
+                try {
+                    // Show loading state
+                    const calendarPreview = document.getElementById('calendarPreview');
+                    calendarPreview.innerHTML = `
+                        <div class="d-flex align-items-center justify-content-center h-100">
+                            <div class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <div class="mt-2">Applying all sheets to calendars...</div>
+                                <div class="mt-2 text-muted">This may take several minutes</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    logInfo('⏳ Showing loading state - operation in progress...');
+                    
+                    // Update active tab and show loading state
+                    logInfo('🔘 Updating UI button states...');
+                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
+                        btn.classList.remove('active');
+                        if (btn.textContent === 'APPLY ALL') {
+                            btn.classList.add('active');
+                            // Show loading state on APPLY ALL button
+                            const originalText = btn.textContent;
+                            btn.disabled = true;
+                            btn.setAttribute('data-original-text', originalText);
+                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
+                            logInfo('🔄 APPLY ALL button set to loading state');
+                        }
+                    });
+
+                    logInfo('📡 Sending bulk apply request to server...');
+                    const response = await fetch('/apply_all_sheets', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ 
+                            spreadsheet_id: spreadsheetId,
+                            use_traditional_parser: useTraditionalParser
+                        })
+                    });
+
+                    logInfo('📥 Response received from server');
+                    const data = await response.json();
+                    logDebug(`Server response: ${JSON.stringify(data)}`);
+                    
+                    // Display debug logs if available
+                    if (data.debug_logs && data.debug_logs.length > 0) {
+                        logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
+                        data.debug_logs.forEach(log => {
+                            // Parse the log level from the server log entry
+                            const logLevel = parseLogLevel(log);
+                            const logMessage = extractLogMessage(log);
+                            
+                            // Display with appropriate level
+                            if (logLevel === 'ERROR') {
+                                logError(logMessage);
+                            } else if (logLevel === 'WARNING') {
+                                logWarning(logMessage);
+                            } else if (logLevel === 'INFO') {
+                                logInfo(logMessage);
+                            } else {
+                                logDebug(logMessage);
+                            }
+                        });
+                    }
+                    
+                    if (data.success) {
+                        logSuccess(`✅ Bulk operation completed successfully!`);
+                        logInfo(`📊 Processing summary:`);
+                        logInfo(`   - Total sheets: ${data.summary.total_sheets}`);
+                        logInfo(`   - Successful: ${data.summary.successful_sheets}`);
+                        logInfo(`   - Failed: ${data.summary.failed_sheets}`);
+                        logInfo(`   - Events created: ${data.summary.total_events_created}`);
+                        logInfo(`   - Events updated: ${data.summary.total_events_updated}`);
+                        logInfo(`   - Events deleted: ${data.summary.total_events_deleted}`);
+                        
+                        // Display results
+                        const summary = data.summary;
+                        const sheetResults = data.sheet_results;
+                        
+                        let resultsHtml = `
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i>
+                                <strong>Bulk Operation Completed Successfully!</strong>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5 class="mb-0">Summary</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <ul class="list-group list-group-flush">
+                                                <li class="list-group-item d-flex justify-content-between">
+                                                    <span>Total Sheets:</span>
+                                                    <span class="badge bg-primary">${summary.total_sheets}</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between">
+                                                    <span>Successful Sheets:</span>
+                                                    <span class="badge bg-success">${summary.successful_sheets}</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between">
+                                                    <span>Failed Sheets:</span>
+                                                    <span class="badge bg-danger">${summary.failed_sheets}</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between">
+                                                    <span>Events Created:</span>
+                                                    <span class="badge bg-info">${summary.total_events_created}</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between">
+                                                    <span>Events Updated:</span>
+                                                    <span class="badge bg-warning">${summary.total_events_updated}</span>
+                                                </li>
+                                                <li class="list-group-item d-flex justify-content-between">
+                                                    <span>Events Deleted:</span>
+                                                    <span class="badge bg-secondary">${summary.total_events_deleted}</span>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h5 class="mb-0">Sheet Results</h5>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                                <table class="table table-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Sheet</th>
+                                                            <th>Status</th>
+                                                            <th>Created</th>
+                                                            <th>Updated</th>
+                                                            <th>Deleted</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                        `;
+                        
+                        for (const [sheetName, result] of Object.entries(sheetResults)) {
+                            const statusClass = result.success ? 'success' : 'danger';
+                            const statusText = result.success ? 'Success' : 'Failed';
+                            const created = result.events_created || 0;
+                            const updated = result.events_updated || 0;
+                            const deleted = result.events_deleted || 0;
+                            
+                            resultsHtml += `
+                                <tr>
+                                    <td>${sheetName}</td>
+                                    <td><span class="badge bg-${statusClass}">${statusText}</span></td>
+                                    <td>${created}</td>
+                                    <td>${updated}</td>
+                                    <td>${deleted}</td>
+                                </tr>
+                            `;
+                        }
+                        
+                        resultsHtml += `
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                View your updated calendars at: 
+                                <a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
+                            </div>
+                        `;
+                        
+                        calendarPreview.innerHTML = resultsHtml;
+                        
+                    } else {
+                        logError(`❌ Bulk operation failed: ${data.error}`);
+                        logError(`💥 Server returned error response`);
+                        calendarPreview.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>Error applying all sheets:</strong> ${data.error}
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    logError(`💥 Exception in applyAllSheets: ${error}`);
+                    logError(`🔍 Error details: ${error.message || error}`);
+                    calendarPreview.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Error applying all sheets:</strong> ${error.message || error}
+                        </div>
+                    `;
+                } finally {
+                    logInfo('🧹 Cleaning up bulk apply operation');
+                    
+                    // Restore button states
+                    logInfo('🔘 Restoring button states...');
+                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
+                        if (btn.hasAttribute('data-original-text')) {
+                            const originalText = btn.getAttribute('data-original-text');
+                            btn.disabled = false;
+                            btn.innerHTML = originalText;
+                            btn.removeAttribute('data-original-text');
+                            logInfo('✅ APPLY ALL button restored to normal state');
+                        }
+                    });
+                    logInfo('✅ Bulk apply operation cleanup completed');
                 }
             }
 
@@ -1064,9 +1369,22 @@
                     
                     // Display debug logs if available
                     if (data.debug_logs && data.debug_logs.length > 0) {
-                        logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                        logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
                         data.debug_logs.forEach(log => {
-                            logDebug(log);
+                            // Parse the log level from the server log entry
+                            const logLevel = parseLogLevel(log);
+                            const logMessage = extractLogMessage(log);
+                            
+                            // Display with appropriate level
+                            if (logLevel === 'ERROR') {
+                                logError(logMessage);
+                            } else if (logLevel === 'WARNING') {
+                                logWarning(logMessage);
+                            } else if (logLevel === 'INFO') {
+                                logInfo(logMessage);
+                            } else {
+                                logDebug(logMessage);
+                            }
                         });
                     }
                     
@@ -1305,9 +1623,22 @@
                         
                         // Display debug logs if available
                         if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
                             data.debug_logs.forEach(log => {
-                                logDebug(log);
+                                // Parse the log level from the server log entry
+                                const logLevel = parseLogLevel(log);
+                                const logMessage = extractLogMessage(log);
+                                
+                                // Display with appropriate level
+                                if (logLevel === 'ERROR') {
+                                    logError(logMessage);
+                                } else if (logLevel === 'WARNING') {
+                                    logWarning(logMessage);
+                                } else if (logLevel === 'INFO') {
+                                    logInfo(logMessage);
+                                } else {
+                                    logDebug(logMessage);
+                                }
                             });
                         }
                     } else {
@@ -1319,9 +1650,22 @@
                         
                         // Display debug logs if available (even on error)
                         if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
                             data.debug_logs.forEach(log => {
-                                logDebug(log);
+                                // Parse the log level from the server log entry
+                                const logLevel = parseLogLevel(log);
+                                const logMessage = extractLogMessage(log);
+                                
+                                // Display with appropriate level
+                                if (logLevel === 'ERROR') {
+                                    logError(logMessage);
+                                } else if (logLevel === 'WARNING') {
+                                    logWarning(logMessage);
+                                } else if (logLevel === 'INFO') {
+                                    logInfo(logMessage);
+                                } else {
+                                    logDebug(logMessage);
+                                }
                             });
                         }
                     }
@@ -1338,6 +1682,11 @@
                     applyChangesBtn.disabled = true;
                 }
             });
+
+            function setCurrentSheetName(name) {
+                const el = document.getElementById('currentSheetName');
+                if (el) el.textContent = name ? `Sport: ${name}` : '';
+            }
         });
     </script>
 </body>
