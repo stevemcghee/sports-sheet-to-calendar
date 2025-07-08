@@ -313,6 +313,25 @@ def load_sheet():
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'}), 400
 
+        # Create a custom log handler to capture debug logs
+        class CaptureLogHandler(logging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.logs = []
+                
+            def emit(self, record):
+                log_entry = self.format(record)
+                self.logs.append(log_entry)
+        
+        # Set up the capture handler
+        capture_handler = CaptureLogHandler()
+        capture_handler.setLevel(logging.DEBUG)
+        capture_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        
+        # Add the handler to the calendar_sync logger
+        from calendar_sync import logger as calendar_logger
+        calendar_logger.addHandler(capture_handler)
+
         try:
             # Get the spreadsheet title
             sheets_service = get_sheets_service()
@@ -354,7 +373,8 @@ def load_sheet():
                     'success': True,
                     'spreadsheet_title': spreadsheet_title,
                     'events': [],
-                    'message': 'No data found in sheet'
+                    'message': 'No data found in sheet',
+                    'debug_logs': capture_handler.logs
                 })
 
             # Parse the events
@@ -376,7 +396,8 @@ def load_sheet():
                         'events': [],
                         'message': 'No events found in sheet',
                         'parser_used': 'traditional' if use_traditional_parser else 'gemini',
-                        'sheets': sheets
+                        'sheets': sheets,
+                        'debug_logs': capture_handler.logs
                     })
                     
                 return jsonify({
@@ -384,12 +405,17 @@ def load_sheet():
                     'spreadsheet_title': spreadsheet_title,
                     'events': events,
                     'parser_used': 'traditional' if use_traditional_parser else 'gemini',
-                    'sheets': sheets
+                    'sheets': sheets,
+                    'debug_logs': capture_handler.logs
                 })
             except Exception as e:
                 logger.error(f"Error parsing events: {str(e)}")
                 logger.error(traceback.format_exc())
-                return jsonify({'success': False, 'error': f'Error parsing events: {str(e)}'}), 500
+                return jsonify({
+                    'success': False, 
+                    'error': f'Error parsing events: {str(e)}',
+                    'debug_logs': capture_handler.logs
+                }), 500
 
         except Exception as e:
             error_msg = str(e)
@@ -399,9 +425,13 @@ def load_sheet():
                 return jsonify({
                     'success': False, 
                     'error': 'Your session has expired. Please re-authenticate.',
-                    'needs_auth': True
+                    'needs_auth': True,
+                    'debug_logs': capture_handler.logs
                 }), 401
             raise
+        finally:
+            # Remove the capture handler
+            calendar_logger.removeHandler(capture_handler)
 
     except Exception as e:
         error_msg = str(e)
@@ -504,20 +534,71 @@ def preview_changes():
 
 @app.route('/apply_changes', methods=['POST'])
 def apply_changes():
+    # Set up log capture
+    class CaptureLogHandler(logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.logs = []
+        
+        def emit(self, record):
+            log_entry = self.format(record)
+            self.logs.append(log_entry)
+    
+    capture_handler = CaptureLogHandler()
+    capture_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    capture_handler.setFormatter(formatter)
+    
+    # Add the handler to the logger
+    logger.addHandler(capture_handler)
+    
     try:
+        data = request.get_json()
+        spreadsheet_id = data.get('spreadsheet_id')
+        sheet_name = data.get('sheet_name')
+        use_traditional_parser = data.get('use_traditional_parser', False)
+
+        if not spreadsheet_id or not sheet_name:
+            return jsonify({'success': False, 'error': 'Spreadsheet ID and sheet name are required'})
+
         logger.info("Starting apply_changes route")
+        logger.info("TEST LOG: This should appear in debug logs")
         service = get_calendar_service()
-        calendar_name = f"{session['sheet_name']} Calendar"
+        calendar_name = f"{sheet_name} Calendar"
         logger.info(f"Using calendar name: {calendar_name}")
         
         calendar_id = create_or_get_sports_calendar(service, calendar_name)
         logger.info(f"Got calendar ID: {calendar_id}")
         
-        # Get proposed events from session
-        proposed_events = session.get('proposed_events', [])
-        logger.info(f"Found {len(proposed_events)} proposed events")
+        # Get credentials for sheets service
+        credentials = Credentials(**session['credentials'])
+        sheets_service = build('sheets', 'v4', credentials=credentials)
         
-        if not proposed_events:
+        # Get sheet data and parse events
+        values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
+        if not values:
+            return jsonify({'success': False, 'error': 'No data found in sheet'})
+
+        # Parse events using either Gemini or traditional parser
+        if use_traditional_parser:
+            logger.info("Using traditional parser")
+            events = parse_sports_events(values, sheet_name)
+        else:
+            logger.info("Using Gemini parser")
+            try:
+                events = parse_sheet_with_gemini(values)
+                if not events:
+                    logger.warning("Gemini parser returned no events, falling back to traditional parser")
+                    events = parse_sports_events(values, sheet_name)
+            except Exception as e:
+                logger.error(f"Error using Gemini parser: {str(e)}")
+                logger.error(traceback.format_exc())
+                logger.info("Falling back to traditional parser")
+                events = parse_sports_events(values, sheet_name)
+        
+        logger.info(f"Found {len(events)} events to apply")
+        
+        if not events:
             logger.error("No events to apply")
             return jsonify({
                 'success': False,
@@ -525,9 +606,9 @@ def apply_changes():
             }), 400
         
         # Ensure we're working with dictionaries
-        if not all(isinstance(event, dict) for event in proposed_events):
-            logger.error("Invalid event format in proposed events")
-            for i, event in enumerate(proposed_events):
+        if not all(isinstance(event, dict) for event in events):
+            logger.error("Invalid event format in events")
+            for i, event in enumerate(events):
                 logger.error(f"Event {i}: {type(event)} - {event}")
             return jsonify({
                 'success': False,
@@ -535,9 +616,9 @@ def apply_changes():
             }), 400
         
         # Validate each event
-        for i, event in enumerate(proposed_events):
+        for i, event in enumerate(events):
             try:
-                logger.debug(f"\nValidating event {i+1}/{len(proposed_events)}")
+                logger.debug(f"\nValidating event {i+1}/{len(events)}")
                 logger.debug(f"Event data: {event}")
                 
                 # Check required fields
@@ -555,22 +636,32 @@ def apply_changes():
                     logger.error(f"End type: {type(event['end'])}")
                     continue
                 
-                # Check dateTime fields
-                if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
-                    logger.error(f"Event missing dateTime in start/end: {event}")
+                # Check for dateTime or date fields (handle both timed and all-day events)
+                if 'dateTime' not in event['start'] and 'date' not in event['start']:
+                    logger.error(f"Event missing dateTime or date in start: {event}")
                     logger.error(f"Start: {event['start']}")
+                    continue
+                
+                if 'dateTime' not in event['end'] and 'date' not in event['end']:
+                    logger.error(f"Event missing dateTime or date in end: {event}")
                     logger.error(f"End: {event['end']}")
                     continue
                 
-                # Validate dateTime format
+                # Validate date format
                 try:
-                    start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
-                    end_date = datetime.fromisoformat(event['end']['dateTime'].replace('Z', '+00:00'))
-                    logger.debug(f"Valid dates: {start_date} to {end_date}")
+                    if 'dateTime' in event['start']:
+                        start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
+                        end_date = datetime.fromisoformat(event['end']['dateTime'].replace('Z', '+00:00'))
+                        logger.debug(f"Valid timed event: {start_date} to {end_date}")
+                    else:
+                        # All-day event
+                        start_date = datetime.fromisoformat(event['start']['date'])
+                        end_date = datetime.fromisoformat(event['end']['date'])
+                        logger.debug(f"Valid all-day event: {start_date} to {end_date}")
                 except Exception as e:
                     logger.error(f"Error parsing dates: {str(e)}")
-                    logger.error(f"Start time: {event['start']['dateTime']}")
-                    logger.error(f"End time: {event['end']['dateTime']}")
+                    logger.error(f"Start: {event['start']}")
+                    logger.error(f"End: {event['end']}")
                     continue
                 
             except Exception as e:
@@ -582,7 +673,7 @@ def apply_changes():
         
         # Apply changes
         logger.info("Applying changes to calendar")
-        update_calendar(service, proposed_events, calendar_id)
+        update_calendar(service, events, calendar_id)
         
         # Get updated calendar events for preview
         logger.debug("Fetching updated events")
@@ -605,8 +696,16 @@ def apply_changes():
                     logger.error(f"Invalid event format: {event}")
                     continue
                 
-                start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
-                formatted_date = start_date.strftime('%a, %b %d, %Y %I:%M %p')
+                # Handle both timed and all-day events
+                if 'dateTime' in event['start']:
+                    start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
+                    formatted_date = start_date.strftime('%a, %b %d, %Y %I:%M %p')
+                elif 'date' in event['start']:
+                    start_date = datetime.fromisoformat(event['start']['date'])
+                    formatted_date = start_date.strftime('%a, %b %d, %Y') + ' (All Day)'
+                else:
+                    logger.error(f"Event has neither dateTime nor date: {event}")
+                    continue
                 
                 formatted_events.append({
                     'summary': event['summary'],
@@ -625,17 +724,23 @@ def apply_changes():
                 continue
         
         logger.info(f"Successfully applied changes. Updated {len(formatted_events)} events")
+        logger.info(f"TEST LOG: Captured {len(capture_handler.logs)} log entries")
         return jsonify({
             'success': True,
-            'events': formatted_events
+            'events': formatted_events,
+            'debug_logs': capture_handler.logs
         })
     except Exception as e:
         logger.error(f"Error in apply_changes: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'debug_logs': capture_handler.logs
         }), 400
+    finally:
+        # Remove the handler to avoid duplicate logs
+        logger.removeHandler(capture_handler)
 
 if __name__ == '__main__':
     app.run(debug=True) 

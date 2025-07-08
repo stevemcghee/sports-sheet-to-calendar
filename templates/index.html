@@ -402,6 +402,9 @@
                         authStatus.innerHTML = '<p class="text-success">Authenticated with Google</p>';
                         authButton.style.display = 'none';
                         enableControls();
+                        
+                        // Auto-load the default sheet
+                        await autoLoadDefaultSheet();
                     } else {
                         logWarning('Not authenticated');
                         authStatus.innerHTML = '<p class="text-danger">Not authenticated</p>';
@@ -413,6 +416,86 @@
                     authStatus.innerHTML = `<p class="text-danger">Error checking auth status: ${error}</p>`;
                     authButton.style.display = 'block';
                     disableControls();
+                }
+            }
+
+            // Auto-load the default sheet
+            async function autoLoadDefaultSheet() {
+                const spreadsheetId = document.getElementById('spreadsheetId').value;
+                const useTraditionalParser = document.getElementById('useTraditionalParser').checked;
+                
+                if (!spreadsheetId) {
+                    logWarning('No spreadsheet ID configured - skipping auto-load');
+                    return;
+                }
+                
+                logInfo(`Auto-loading default sheet - Spreadsheet ID: ${spreadsheetId}, Traditional Parser: ${useTraditionalParser}`);
+                
+                try {
+                    logDebug('Sending auto-load request to /load_sheet');
+                    const response = await fetch('/load_sheet', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ 
+                            spreadsheet_id: spreadsheetId,
+                            use_traditional_parser: useTraditionalParser
+                        })
+                    });
+
+                    const data = await response.json();
+                    logDebug(`Auto-load response received: ${JSON.stringify(data)}`);
+                    
+                    if (data.success) {
+                        logSuccess(`Auto-loaded sheet successfully: ${data.spreadsheet_title}`);
+                        // Always update the spreadsheet title
+                        const spreadsheetInfo = document.getElementById('spreadsheetInfo');
+                        const spreadsheetTitleEl = document.getElementById('spreadsheetTitle');
+                        spreadsheetTitleEl.textContent = data.spreadsheet_title;
+                        spreadsheetInfo.style.display = 'block';
+
+                        if (data.sheets) {
+                            logInfo(`Found ${data.sheets.length} sheets: ${data.sheets.join(', ')}`);
+                            // Create tab buttons
+                            sheetTabs.innerHTML = '';
+                            
+                            // Add ALL button first
+                            const allButton = document.createElement('button');
+                            allButton.type = 'button';
+                            allButton.className = 'btn btn-outline-primary';
+                            allButton.textContent = 'ALL';
+                            allButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
+                            sheetTabs.appendChild(allButton);
+                            
+                            // Add individual sheet buttons
+                            data.sheets.forEach((sheet, index) => {
+                                const button = document.createElement('button');
+                                button.type = 'button';
+                                button.className = 'btn btn-outline-primary';
+                                if (index === 0) button.classList.add('active');
+                                button.textContent = sheet;
+                                button.onclick = () => loadSheetData(spreadsheetId, sheet, useTraditionalParser);
+                                sheetTabs.appendChild(button);
+                            });
+                            sheetTabs.style.display = 'block';
+                            
+                            // Load first sheet by default
+                            if (data.sheets.length > 0) {
+                                logInfo(`Auto-loading first sheet: ${data.sheets[0]}`);
+                                loadSheetData(spreadsheetId, data.sheets[0], useTraditionalParser);
+                            }
+                        } else {
+                            logWarning('No sheets found in spreadsheet');
+                            sheetTabs.style.display = 'none';
+                        }
+                    } else {
+                        logError(`Error auto-loading sheet: ${data.error}`);
+                        // Don't show alert for auto-load errors, just log them
+                    }
+                } catch (error) {
+                    logError(`Network error auto-loading sheet: ${error}`);
+                    // Don't show alert for auto-load errors, just log them
                 }
             }
 
@@ -647,6 +730,15 @@
 
                     if (data.success) {
                         logSuccess(`Sheet data loaded successfully - Found ${data.events ? data.events.length : 0} events`);
+                        
+                        // Display debug logs if available
+                        if (data.debug_logs && data.debug_logs.length > 0) {
+                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            data.debug_logs.forEach(log => {
+                                logDebug(log);
+                            });
+                        }
+                        
                         // Display the data
                         if (data.events) {
                             displayEvents(data.events, data.spreadsheet_title);
@@ -655,6 +747,14 @@
                             displayEvents([], data.spreadsheet_title);
                         }
                     } else {
+                        // Display debug logs if available (even in error case)
+                        if (data.debug_logs && data.debug_logs.length > 0) {
+                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            data.debug_logs.forEach(log => {
+                                logDebug(log);
+                            });
+                        }
+                        
                         // Check if the error is related to authentication
                         if (data.error && (data.error.includes('expired') || data.error.includes('revoked'))) {
                             logError('Session expired - authentication required');
@@ -775,16 +875,30 @@
 
             // Add date formatting function
             function formatDateTime(dateTimeStr) {
-                const date = new Date(dateTimeStr);
-                const options = {
-                    weekday: 'short',
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                };
-                return date.toLocaleDateString('en-US', options);
+                // Check if this is a date-only string (all-day event)
+                if (dateTimeStr && dateTimeStr.includes('T') === false) {
+                    // This is a date-only string (YYYY-MM-DD format)
+                    const date = new Date(dateTimeStr + 'T00:00:00');
+                    const options = {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    };
+                    return date.toLocaleDateString('en-US', options);
+                } else {
+                    // This is a datetime string
+                    const date = new Date(dateTimeStr);
+                    const options = {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    };
+                    return date.toLocaleDateString('en-US', options);
+                }
             }
 
             function formatTime(dateTimeStr) {
@@ -844,11 +958,42 @@
                                 </thead>
                                 <tbody>
                                     ${events.map(event => {
-                                        // Safely access event properties with fallbacks
-                                        const start = event?.start?.dateTime ? new Date(event.start.dateTime) : null;
-                                        const end = event?.end?.dateTime ? new Date(event.end.dateTime) : null;
+                                        // Handle both dateTime (timed events) and date (all-day events)
+                                        let start = null;
+                                        let end = null;
+                                        let isAllDay = false;
+                                        
+                                        if (event?.start?.dateTime) {
+                                            // Timed event - parse directly to avoid timezone conversion
+                                            start = new Date(event.start.dateTime);
+                                            end = event?.end?.dateTime ? new Date(event.end.dateTime) : null;
+                                        } else if (event?.start?.date) {
+                                            // All-day event - parse date string correctly to avoid timezone issues
+                                            console.log('All-day event date:', event.start.date);
+                                            // Parse YYYY-MM-DD format correctly by adding time component
+                                            start = new Date(event.start.date + 'T00:00:00');
+                                            console.log('Parsed start date:', start);
+                                            end = event?.end?.date ? new Date(event.end.date + 'T00:00:00') : null;
+                                            isAllDay = true;
+                                        }
                                         
                                         const formatField = (value) => value || 'N/A';
+                                        
+                                        const formatTime = (start, end, isAllDay) => {
+                                            if (isAllDay) {
+                                                return 'All Day';
+                                            }
+                                            if (start && end) {
+                                                return `${start.toLocaleTimeString('en-US', { 
+                                                    hour: 'numeric', 
+                                                    minute: '2-digit' 
+                                                })} - ${end.toLocaleTimeString('en-US', { 
+                                                    hour: 'numeric', 
+                                                    minute: '2-digit' 
+                                                })}`;
+                                            }
+                                            return 'N/A';
+                                        };
                                         
                                         return `
                                             <tr>
@@ -858,14 +1003,7 @@
                                                     month: 'long', 
                                                     day: 'numeric' 
                                                 }) : 'N/A'}</td>
-                                                <td>${start && end ? 
-                                                    `${start.toLocaleTimeString('en-US', { 
-                                                        hour: 'numeric', 
-                                                        minute: '2-digit' 
-                                                    })} - ${end.toLocaleTimeString('en-US', { 
-                                                        hour: 'numeric', 
-                                                        minute: '2-digit' 
-                                                    })}` : 'N/A'}</td>
+                                                <td>${formatTime(start, end, isAllDay)}</td>
                                                 <td>${formatField(event?.summary)}</td>
                                                 <td>${formatField(event?.location)}</td>
                                                 <td>${formatField(event?.transportation)}</td>
@@ -896,35 +1034,170 @@
                     previewChangesBtn.disabled = true;
                     applyChangesBtn.disabled = true;
 
+                    const spreadsheetId = document.getElementById('spreadsheetId').value;
+                    const useTraditionalParser = document.getElementById('useTraditionalParser').checked;
+                    
+                    // Get the currently active sheet
+                    const activeTab = sheetTabs.querySelector('.active');
+                    const sheetName = activeTab ? activeTab.textContent : null;
+                    
+                    if (!sheetName || sheetName === 'ALL') {
+                        alert('Please select a specific sheet to preview changes');
+                        return;
+                    }
+
                     const response = await fetch('/preview_changes', {
-                        method: 'POST'
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            spreadsheet_id: spreadsheetId,
+                            sheet_name: sheetName,
+                            use_traditional_parser: useTraditionalParser
+                        })
                     });
 
                     const data = await response.json();
+                    
+                    // Display debug logs if available
+                    if (data.debug_logs && data.debug_logs.length > 0) {
+                        logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                        data.debug_logs.forEach(log => {
+                            logDebug(log);
+                        });
+                    }
+                    
                     if (data.success) {
                         // Display changes preview
-                        changesPreview.innerHTML = `
-                            <div class="list-group">
-                                ${data.changes.map(change => `
-                                    <div class="card event-card ${change.type}-event">
-                                        <div class="card-body">
-                                            <h6 class="card-title">
-                                                <i class="bi ${change.type === 'create' ? 'bi-plus-circle' : 
-                                                             change.type === 'update' ? 'bi-arrow-repeat' : 
-                                                             'bi-trash'}"></i>
-                                                ${change.type.charAt(0).toUpperCase() + change.type.slice(1)} Event
-                                            </h6>
-                                            <p class="card-text">
-                                                <strong>${change.event.summary}</strong><br>
-                                                Date: ${formatDateTime(change.event.start.dateTime)}<br>
-                                                Time: ${formatTime(change.event.start.dateTime)}<br>
-                                                Location: ${change.event.location || 'N/A'}
-                                            </p>
+                        const changes = data.changes;
+                        const allChanges = [];
+                        
+                        // Add events to be added
+                        changes.to_add.forEach(event => {
+                            allChanges.push({
+                                type: 'create',
+                                event: event
+                            });
+                        });
+                        
+                        // Add events to be updated
+                        changes.to_update.forEach(update => {
+                            allChanges.push({
+                                type: 'update',
+                                event: update.new,
+                                oldEvent: update.old
+                            });
+                        });
+                        
+                        // Add events to be deleted
+                        changes.to_delete.forEach(event => {
+                            allChanges.push({
+                                type: 'delete',
+                                event: event
+                            });
+                        });
+                        
+                        if (allChanges.length === 0) {
+                            changesPreview.innerHTML = `
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    No changes needed. All events are up to date.
+                                </div>
+                            `;
+                        } else {
+                            // Find the first event date to set calendar month
+                            let firstEventDate = null;
+                            if (allChanges.length > 0) {
+                                const firstEvent = allChanges[0].event;
+                                if (firstEvent.start.dateTime) {
+                                    firstEventDate = new Date(firstEvent.start.dateTime);
+                                } else if (firstEvent.start.date) {
+                                    // Parse all-day event date correctly
+                                    firstEventDate = new Date(firstEvent.start.date + 'T00:00:00');
+                                }
+                            }
+                            
+                            // Set calendar month to first event month
+                            const calendarMonth = firstEventDate ? 
+                                `${firstEventDate.getFullYear()}-${String(firstEventDate.getMonth() + 1).padStart(2, '0')}` : 
+                                '2025-09';
+                            
+                            changesPreview.innerHTML = `
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    Preview of ${allChanges.length} changes to be applied
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h5>Changes Preview</h5>
+                                        <div class="list-group">
+                                            ${allChanges.map(change => `
+                                                <div class="card event-card ${change.type}-event">
+                                                    <div class="card-body">
+                                                        <h6 class="card-title">
+                                                            <i class="bi ${change.type === 'create' ? 'bi-plus-circle' : 
+                                                                         change.type === 'update' ? 'bi-arrow-repeat' : 
+                                                                         'bi-trash'}"></i>
+                                                            ${change.type.charAt(0).toUpperCase() + change.type.slice(1)} Event
+                                                        </h6>
+                                                        <p class="card-text">
+                                                            <strong>${change.event.summary}</strong><br>
+                                                            Date: ${formatDateTime(change.event.start.dateTime || change.event.start.date)}<br>
+                                                            Time: ${change.event.start.dateTime ? formatTime(change.event.start.dateTime) : 'All Day'}<br>
+                                                            Location: ${change.event.location || 'N/A'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            `).join('')}
                                         </div>
                                     </div>
-                                `).join('')}
-                            </div>
-                        `;
+                                    <div class="col-md-6">
+                                        <h5>Calendar Preview</h5>
+                                        <div class="alert alert-info">
+                                            <i class="bi bi-info-circle"></i>
+                                            After applying changes, you can view your calendar at:
+                                            <br><a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
+                                        </div>
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h6 class="card-title">Events to be added:</h6>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Date</th>
+                                                                <th>Event</th>
+                                                                <th>Location</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            ${allChanges.filter(change => change.type === 'create').map(change => {
+                                                                const event = change.event;
+                                                                let eventDate;
+                                                                if (event.start.dateTime) {
+                                                                    eventDate = new Date(event.start.dateTime);
+                                                                } else if (event.start.date) {
+                                                                    // Parse all-day event date correctly
+                                                                    eventDate = new Date(event.start.date + 'T00:00:00');
+                                                                }
+                                                                return `
+                                                                    <tr>
+                                                                        <td>${eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                                                                        <td>${event.summary}</td>
+                                                                        <td>${event.location || 'N/A'}</td>
+                                                                    </tr>
+                                                                `;
+                                                            }).join('')}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }
                         // Only enable apply button after successful preview
                         applyChangesBtn.disabled = false;
                     } else {
@@ -958,23 +1231,42 @@
                         </div>
                     `;
 
+                    const spreadsheetId = document.getElementById('spreadsheetId').value;
+                    const useTraditionalParser = document.getElementById('useTraditionalParser').checked;
+                    
+                    // Get the currently active sheet
+                    const activeTab = sheetTabs.querySelector('.active');
+                    const sheetName = activeTab ? activeTab.textContent : null;
+                    
+                    if (!sheetName || sheetName === 'ALL') {
+                        alert('Please select a specific sheet to apply changes');
+                        return;
+                    }
+
                     const response = await fetch('/apply_changes', {
-                        method: 'POST'
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            spreadsheet_id: spreadsheetId,
+                            sheet_name: sheetName,
+                            use_traditional_parser: useTraditionalParser
+                        })
                     });
 
                     const data = await response.json();
                     if (data.success) {
-                        // Display calendar preview with embedded Google Calendar
+                        // Display success message and calendar link
                         calendarPreview.innerHTML = `
-                            <div class="embed-responsive embed-responsive-16by9">
-                                <iframe 
-                                    src="https://calendar.google.com/calendar/embed?height=600&wkst=1&bgcolor=%23ffffff&ctz=America%2FNew_York&mode=month"
-                                    style="border-width:0" 
-                                    width="100%" 
-                                    height="600" 
-                                    frameborder="0" 
-                                    scrolling="no">
-                                </iframe>
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i>
+                                Successfully applied ${data.events.length} events to the calendar!
+                            </div>
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                View your updated calendar at: 
+                                <a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
                             </div>
                             <div class="mt-3">
                                 <div class="table-responsive">
@@ -989,32 +1281,16 @@
                                         </thead>
                                         <tbody>
                                             ${data.events.map(event => {
-                                                // Safely access event properties with fallbacks
+                                                // The backend sends formatted events with these fields
                                                 const summary = event?.summary || 'Untitled Event';
-                                                const start = event?.start;
                                                 const location = event?.location || 'N/A';
-                                                
-                                                // Handle both dateTime and date formats
-                                                let formattedDate = 'N/A';
-                                                let formattedTime = 'N/A';
-                                                
-                                                if (start) {
-                                                    if (start.dateTime) {
-                                                        formattedDate = formatDateTime(start.dateTime);
-                                                        formattedTime = formatTime(start.dateTime);
-                                                    } else if (start.date) {
-                                                        // For all-day events
-                                                        const date = new Date(start.date);
-                                                        formattedDate = formatDateTime(date);
-                                                        formattedTime = 'All Day';
-                                                    }
-                                                }
+                                                const formattedDate = event?.formatted_date || 'N/A';
                                                 
                                                 return `
                                                     <tr>
                                                         <td>${summary}</td>
                                                         <td>${formattedDate}</td>
-                                                        <td>${formattedTime}</td>
+                                                        <td>${formattedDate.includes('All Day') ? 'All Day' : 'N/A'}</td>
                                                         <td>${location}</td>
                                                     </tr>
                                                 `;
@@ -1024,12 +1300,28 @@
                                 </div>
                             </div>
                         `;
+                        
+                        // Display debug logs if available
+                        if (data.debug_logs && data.debug_logs.length > 0) {
+                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            data.debug_logs.forEach(log => {
+                                logDebug(log);
+                            });
+                        }
                     } else {
                         calendarPreview.innerHTML = `
                             <div class="d-flex align-items-center justify-content-center h-100">
                                 <p class="text-danger">Error applying changes: ${data.error}</p>
                             </div>
                         `;
+                        
+                        // Display debug logs if available (even on error)
+                        if (data.debug_logs && data.debug_logs.length > 0) {
+                            logInfo(`Debug logs from server (${data.debug_logs.length} entries):`);
+                            data.debug_logs.forEach(log => {
+                                logDebug(log);
+                            });
+                        }
                     }
                 } catch (error) {
                     calendarPreview.innerHTML = `

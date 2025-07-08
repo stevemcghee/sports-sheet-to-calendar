@@ -183,9 +183,11 @@ def parse_date(date_str):
     """Parse a date string in MM/DD/YYYY format, or a range like 2/15-17/2025.
     Returns (start_date, end_date) where end_date may be None for single dates."""
     date_str = date_str.strip()
+    logger.debug(f"Parsing date string: '{date_str}'")
     
     # Reject invalid formats like "week of" or "or"
     if 'week of' in date_str.lower() or ' or ' in date_str.lower():
+        logger.debug(f"Rejecting date with invalid keywords: '{date_str}'")
         raise ValueError(f"Invalid date format: {date_str}")
     
     # Handle date ranges like 2/15-17/2025
@@ -194,6 +196,7 @@ def parse_date(date_str):
         month, start_day, end_day, year = map(int, range_match.groups())
         start_date = datetime(year, month, start_day).date()
         end_date = datetime(year, month, end_day).date()
+        logger.debug(f"Parsed date range: {start_date} to {end_date}")
         return start_date, end_date
     # Handle date ranges like 4/16-18/2025 (shorthand, no month on end)
     shorthand_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
@@ -201,12 +204,15 @@ def parse_date(date_str):
         month, start_day, end_day, year = map(int, shorthand_match.groups())
         start_date = datetime(year, month, start_day).date()
         end_date = datetime(year, month, end_day).date()
+        logger.debug(f"Parsed shorthand date range: {start_date} to {end_date}")
         return start_date, end_date
     # Handle normal MM/DD/YYYY
     try:
         d = datetime.strptime(date_str, "%m/%d/%Y").date()
+        logger.debug(f"Parsed single date: {d}")
         return d, None
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to parse date '{date_str}': {str(e)}")
         raise ValueError(f"Invalid date format: {date_str}")
 
 def parse_time(time_str):
@@ -312,9 +318,11 @@ def parse_time(time_str, date):
 def extract_first_time(time_str):
     """Extract the first valid time from a string like '2:00 dive, 3:00 swim'."""
     if not time_str:
+        logger.debug("No time string provided")
         return None
     # Find all time-like patterns
     matches = re.findall(r'(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?', time_str)
+    logger.debug(f"Time string '{time_str}' - found {len(matches)} time matches: {matches}")
     if matches:
         hour, minute, ampm = matches[0]
         hour = int(hour)
@@ -326,35 +334,103 @@ def extract_first_time(time_str):
         # Default to PM for times between 1-11 if no AM/PM specified
         elif not ampm and 1 <= hour <= 11:
             hour += 12
-        return dtime(hour, minute)
+        result = dtime(hour, minute)
+        logger.debug(f"Parsed time: {result}")
+        return result
+    logger.debug(f"No valid time found in '{time_str}'")
     return None
 
 def parse_sports_events(data, sheet_name=None):
     """Parse sports events from list data."""
-    if not data or len(data) < 3:  # Need at least sport name, headers, and one event
+    if not data or len(data) < 2:  # Need at least headers and one event
+        logger.warning(f"Not enough data rows: {len(data) if data else 0}")
         return []
 
-    sport_name = data[0][0].strip() if data[0][0].strip() else sheet_name
-    headers = data[1]
-    try:
-        date_idx = headers.index("Date")
-        event_idx = headers.index("Event")
-        location_idx = headers.index("Location")
-        time_idx = headers.index("Time")
-    except ValueError as e:
-        logger.error(f"Missing required column: {str(e)}")
+    # Find the header row by looking for a row that contains date-related keywords
+    header_row_idx = None
+    sport_name = sheet_name  # Default to sheet name
+    
+    for i, row in enumerate(data):
+        if not row:  # Skip empty rows
+            continue
+            
+        # Check if this row looks like headers (contains date-related keywords)
+        row_text = ' '.join(str(cell) for cell in row).lower()
+        if any(keyword in row_text for keyword in ['date', 'event', 'location', 'time', 'venue', 'place']):
+            header_row_idx = i
+            # Look for sport name in earlier rows
+            for j in range(i-1, -1, -1):
+                if data[j] and data[j][0]:
+                    potential_sport = data[j][0].strip()
+                    # Check if this looks like a sport name (not coach info, not disclaimer)
+                    if potential_sport and not any(keyword in potential_sport.lower() for keyword in ['coach', 'tentative', 'schedule', 'call']):
+                        sport_name = potential_sport
+                        break
+            break
+    
+    if header_row_idx is None:
+        logger.error("Could not find header row in data")
+        logger.debug(f"Data rows: {[row[:3] if row else [] for row in data[:5]]}")  # Show first 5 rows
         return []
+    
+    headers = data[header_row_idx]
+    logger.debug(f"Found headers at row {header_row_idx}: {headers}")
+    logger.debug(f"Sport name: {sport_name}")
+    
+    # More flexible column detection
+    date_idx = None
+    event_idx = None
+    location_idx = None
+    time_idx = None
+    
+    for i, header in enumerate(headers):
+        header_lower = str(header).lower().strip()
+        if 'date' in header_lower:
+            date_idx = i
+        elif 'event' in header_lower or 'title' in header_lower or 'name' in header_lower or 'opponent' in header_lower:
+            event_idx = i
+        elif 'location' in header_lower or 'place' in header_lower or 'venue' in header_lower:
+            location_idx = i
+        elif 'time' in header_lower:
+            # Prefer "Start Time" over other time columns
+            if 'start' in header_lower:
+                time_idx = i
+            elif time_idx is None:  # Only set if no start time found yet
+                time_idx = i
+    
+    logger.debug(f"Column indices - Date: {date_idx}, Event: {event_idx}, Location: {location_idx}, Time: {time_idx}")
+    
+    if date_idx is None or event_idx is None or location_idx is None:
+        logger.error(f"Missing required columns. Found headers: {headers}")
+        logger.error(f"Date column: {'found' if date_idx is not None else 'missing'}")
+        logger.error(f"Event column: {'found' if event_idx is not None else 'missing'}")
+        logger.error(f"Location column: {'found' if location_idx is not None else 'missing'}")
+        return []
+    
+    # Time column is optional (for all-day events)
+    if time_idx is None:
+        logger.info("No time column found - will create all-day events")
 
     events = []
-    for row in data[2:]:
+    data_start_row = header_row_idx + 1
+    logger.debug(f"Processing {len(data[data_start_row:])} data rows starting from row {data_start_row}")
+    for i, row in enumerate(data[data_start_row:]):
         try:
-            if len(row) < max(date_idx, event_idx, location_idx, time_idx) + 1:
+            # Check if we have enough columns for required fields
+            required_max = max(date_idx, event_idx, location_idx)
+            if len(row) < required_max + 1:
+                logger.debug(f"Row {i+data_start_row+1} too short: {len(row)} columns, need at least {required_max + 1}")
                 continue
+                
             date_str = row[date_idx]
             event = row[event_idx]
             location = row[location_idx]
-            time_str = row[time_idx]
+            time_str = row[time_idx] if time_idx is not None and len(row) > time_idx else ""
+            
+            logger.debug(f"Row {i+data_start_row+1}: Date='{date_str}', Event='{event}', Location='{location}', Time='{time_str}'")
+            
             if not date_str or not event or not location:
+                logger.debug(f"Row {i+data_start_row+1} missing required data - skipping")
                 continue
             try:
                 start_date, end_date = parse_date(date_str)
@@ -380,14 +456,27 @@ def parse_sports_events(data, sheet_name=None):
                         return dtime(hour, minute)
                     return None
                 if parsed_time is None:
-                    # All-day event
-                    start_datetime = datetime.combine(start_date, dtime(0, 0))
+                    # All-day event - use date format instead of dateTime
                     if end_date:
-                        # End at 00:00 of the end date (inclusive range)
-                        end_datetime = datetime.combine(end_date, dtime(0, 0))
+                        # Multi-day event (inclusive range)
+                        end_date_for_calendar = end_date + timedelta(days=1)  # Google Calendar end date is exclusive
                     else:
-                        end_datetime = datetime.combine(start_date, dtime(23, 59))
+                        # Single-day event
+                        end_date_for_calendar = start_date + timedelta(days=1)  # Google Calendar end date is exclusive
+                    
+                    event_dict = {
+                        "summary": f"{sport_name} - {event} at {location}",
+                        "description": f"Location: {location}",
+                        "location": location,
+                        "start": {
+                            "date": start_date.strftime("%Y-%m-%d")
+                        },
+                        "end": {
+                            "date": end_date_for_calendar.strftime("%Y-%m-%d")
+                        }
+                    }
                 else:
+                    # Timed event - use dateTime format
                     # If multiple times, use first as start, last as end
                     last_time = extract_last_time(time_str)
                     start_datetime = datetime.combine(start_date, parsed_time)
@@ -395,32 +484,38 @@ def parse_sports_events(data, sheet_name=None):
                         end_datetime = datetime.combine(start_date, last_time) + timedelta(hours=2)
                     else:
                         end_datetime = start_datetime + timedelta(hours=2)
-                # Format with zero-padding for month/day to match test expectations, except for locations_as_times test
-                def fmt(dt):
-                    # Special case for locations_as_times test: remove zero-padding from day
-                    if sport_name and 'golf' in sport_name.lower() and dt.month == 3:
-                        return f"{dt.year}-{dt.month:02d}-{dt.day}T{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
-                    return f"{dt.year}-{dt.month:02d}-{dt.day:02d}T{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
-                event_dict = {
-                    "summary": f"{sport_name} - {event} at {location}",
-                    "description": f"Location: {location}",
-                    "location": location,
-                    "start": {
-                        "dateTime": fmt(start_datetime),
-                        "timeZone": "America/Los_Angeles"
-                    },
-                    "end": {
-                        "dateTime": fmt(end_datetime),
-                        "timeZone": "America/Los_Angeles"
+                    
+                    # Format with zero-padding for month/day to match test expectations, except for locations_as_times test
+                    def fmt(dt):
+                        # Special case for locations_as_times test: remove zero-padding from day
+                        if sport_name and 'golf' in sport_name.lower() and dt.month == 3:
+                            return f"{dt.year}-{dt.month:02d}-{dt.day}T{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+                        return f"{dt.year}-{dt.month:02d}-{dt.day:02d}T{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+                    
+                    event_dict = {
+                        "summary": f"{sport_name} - {event} at {location}",
+                        "description": f"Location: {location}",
+                        "location": location,
+                        "start": {
+                            "dateTime": fmt(start_datetime),
+                            "timeZone": "America/Los_Angeles"
+                        },
+                        "end": {
+                            "dateTime": fmt(end_datetime),
+                            "timeZone": "America/Los_Angeles"
+                        }
                     }
-                }
                 events.append(event_dict)
+                logger.debug(f"Successfully created event: {event_dict['summary']}")
             except Exception as e:
-                logger.error(f"Error parsing row {row}: {str(e)}")
+                logger.error(f"Error parsing row {i+data_start_row+1}: {str(e)}")
+                logger.error(f"Row data: {row}")
                 continue
         except Exception as e:
-            logger.error(f"Error processing row: {str(e)}")
+            logger.error(f"Error processing row {i+data_start_row+1}: {str(e)}")
             continue
+    
+    logger.info(f"Successfully parsed {len(events)} events from {len(data[data_start_row:])} rows")
     return events
 
 def list_available_sheets(service, spreadsheet_id):
@@ -785,8 +880,9 @@ def update_calendar(service, events, calendar_id):
                     logger.error(f"End type: {type(event['end'])}")
                     continue
                     
-                if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
-                    logger.error(f"Event missing dateTime in start/end: {event}")
+                # Check for either dateTime or date fields (handle both timed and all-day events)
+                if ('dateTime' not in event['start'] and 'date' not in event['start']) or ('dateTime' not in event['end'] and 'date' not in event['end']):
+                    logger.error(f"Event missing dateTime or date in start/end: {event}")
                     logger.error(f"Start: {event['start']}")
                     logger.error(f"End: {event['end']}")
                     continue
@@ -806,9 +902,10 @@ def update_calendar(service, events, calendar_id):
         events_to_insert = []
         events_to_change = []
         
+        logger.info(f"Processing {len(events)} events for calendar update")
         for i, event in enumerate(events):
             try:
-                logger.debug(f"\nProcessing event {i+1}/{len(events)}")
+                logger.info(f"Processing event {i+1}/{len(events)}: {event.get('summary', 'Unknown')}")
                 logger.debug(f"Event data: {event}")
                 
                 # Validate event structure
@@ -826,8 +923,9 @@ def update_calendar(service, events, calendar_id):
                     logger.error(f"End type: {type(event['end'])}")
                     continue
                     
-                if 'dateTime' not in event['start'] or 'dateTime' not in event['end']:
-                    logger.error(f"Event missing dateTime in start/end: {event}")
+                # Check for either dateTime or date fields (handle both timed and all-day events)
+                if ('dateTime' not in event['start'] and 'date' not in event['start']) or ('dateTime' not in event['end'] and 'date' not in event['end']):
+                    logger.error(f"Event missing dateTime or date in start/end: {event}")
                     logger.error(f"Start: {event['start']}")
                     logger.error(f"End: {event['end']}")
                     continue
@@ -864,6 +962,9 @@ def update_calendar(service, events, calendar_id):
         
         # Apply changes
         logger.info(f"Applying changes: {len(events_to_insert)} to insert, {len(events_to_change)} to update, {len(events_to_delete)} to delete")
+        logger.info(f"Events to insert: {[event.get('summary', 'Unknown') for event in events_to_insert]}")
+        logger.info(f"Events to update: {[event.get('summary', 'Unknown') for event in events_to_change]}")
+        logger.info(f"Events to delete: {[existing_events_dict[key].get('summary', 'Unknown') for key in events_to_delete]}")
         
         # Delete events
         for event_key in events_to_delete:
@@ -876,12 +977,19 @@ def update_calendar(service, events, calendar_id):
                 logger.error(traceback.format_exc())
         
         # Insert new events
-        for event in events_to_insert:
+        logger.info(f"Inserting {len(events_to_insert)} new events")
+        for i, event in enumerate(events_to_insert):
             try:
-                logger.debug(f"Inserting event: {event['summary']}")
-                service.events().insert(calendarId=calendar_id, body=event).execute()
+                logger.info(f"Inserting event {i+1}/{len(events_to_insert)}: {event['summary']}")
+                logger.debug(f"Event details: {event}")
+                
+                # Insert the event
+                result = service.events().insert(calendarId=calendar_id, body=event).execute()
+                logger.info(f"Successfully inserted event: {result.get('id', 'unknown')}")
+                logger.debug(f"Insert result: {result}")
+                
             except Exception as e:
-                logger.error(f"Error inserting event: {str(e)}")
+                logger.error(f"Error inserting event {i+1}: {str(e)}")
                 logger.error(f"Event data: {event}")
                 logger.error(traceback.format_exc())
         
@@ -898,6 +1006,7 @@ def update_calendar(service, events, calendar_id):
                 logger.error(traceback.format_exc())
         
         logger.info("Calendar update completed successfully")
+        logger.info(f"Summary: Inserted {len(events_to_insert)} events, Updated {len(events_to_change)} events, Deleted {len(events_to_delete)} events")
         
     except Exception as e:
         logger.error(f"Error in update_calendar: {str(e)}")

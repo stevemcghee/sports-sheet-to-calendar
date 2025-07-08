@@ -54,6 +54,8 @@ def parse_sheet_with_gemini(values, model=None):
         prompt = f"""
         Analyze this spreadsheet data and extract calendar events. Each row represents an event.
         Return the events in JSON format with the following structure:
+        
+        For timed events (with specific time):
         {{
             "events": [
                 {{
@@ -67,10 +69,24 @@ def parse_sheet_with_gemini(values, model=None):
                         "timeZone": "America/Los_Angeles"
                     }},
                     "location": "event location",
-                    "description": "Location: location",
-                    "recurrence": [
-                        "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR"  # Only include if event is recurring
-                    ]
+                    "description": "Location: location"
+                }}
+            ]
+        }}
+        
+        For all-day events (no specific time):
+        {{
+            "events": [
+                {{
+                    "summary": "Sport Name: Event Name @ Location",
+                    "start": {{
+                        "date": "YYYY-MM-DD"
+                    }},
+                    "end": {{
+                        "date": "YYYY-MM-DD"
+                    }},
+                    "location": "event location",
+                    "description": "Location: location"
                 }}
             ]
         }}
@@ -99,8 +115,9 @@ def parse_sheet_with_gemini(values, model=None):
              * MM/DD/YYYY HH:MM
              * Relative dates (e.g., "next Monday", "every Tuesday")
              * Recurring patterns (e.g., "every Monday", "every other Wednesday")
-           - Convert all datetimes to ISO 8601 format (YYYY-MM-DDTHH:MM:SS)
-           - If time is missing, assume 9:00 AM
+           - For events WITH time: Convert to ISO 8601 format (YYYY-MM-DDTHH:MM:SS) and use dateTime format
+           - For events WITHOUT time: Use date format (YYYY-MM-DD) for all-day events
+           - If time is missing, create an all-day event using date format
            - If date is missing, skip the event
 
         4. Recurring Events:
@@ -193,36 +210,58 @@ def parse_sheet_with_gemini(values, model=None):
                         print(f"Missing required fields in event: {event}")
                         continue
                         
-                    # Ensure start and end have required fields
-                    if not all(key in event['start'] for key in ['dateTime', 'timeZone']):
-                        print(f"Missing required fields in start: {event['start']}")
-                        continue
-                    if not all(key in event['end'] for key in ['dateTime', 'timeZone']):
-                        print(f"Missing required fields in end: {event['end']}")
-                        continue
-                        
-                    # Clean up the event
-                    cleaned_event = {
-                        'summary': event['summary'].strip(),
-                        'start': {
-                            'dateTime': event['start']['dateTime'].strip(),
-                            'timeZone': 'America/Los_Angeles'
-                        },
-                        'end': {
-                            'dateTime': event['end']['dateTime'].strip(),
-                            'timeZone': 'America/Los_Angeles'
-                        },
-                        'location': event['location'].strip(),
-                        'description': event['description'].strip()
-                    }
+                    # Determine if this is an all-day event or timed event
+                    is_all_day = 'date' in event['start'] and 'date' in event['end']
+                    is_timed = 'dateTime' in event['start'] and 'dateTime' in event['end']
                     
-                    # Validate datetime format
-                    try:
-                        datetime.datetime.fromisoformat(cleaned_event['start']['dateTime'].replace('Z', '+00:00'))
-                        datetime.datetime.fromisoformat(cleaned_event['end']['dateTime'].replace('Z', '+00:00'))
-                    except ValueError:
-                        print(f"Invalid datetime format in event: {cleaned_event}")
+                    if not (is_all_day or is_timed):
+                        print(f"Event must have either date (all-day) or dateTime (timed) format: {event}")
                         continue
+                    
+                    if is_all_day:
+                        # All-day event
+                        cleaned_event = {
+                            'summary': event['summary'].strip(),
+                            'start': {
+                                'date': event['start']['date'].strip()
+                            },
+                            'end': {
+                                'date': event['end']['date'].strip()
+                            },
+                            'location': event['location'].strip(),
+                            'description': event['description'].strip()
+                        }
+                        
+                        # Validate date format (YYYY-MM-DD)
+                        try:
+                            datetime.datetime.strptime(cleaned_event['start']['date'], '%Y-%m-%d')
+                            datetime.datetime.strptime(cleaned_event['end']['date'], '%Y-%m-%d')
+                        except ValueError:
+                            print(f"Invalid date format in all-day event: {cleaned_event}")
+                            continue
+                    else:
+                        # Timed event
+                        cleaned_event = {
+                            'summary': event['summary'].strip(),
+                            'start': {
+                                'dateTime': event['start']['dateTime'].strip(),
+                                'timeZone': 'America/Los_Angeles'
+                            },
+                            'end': {
+                                'dateTime': event['end']['dateTime'].strip(),
+                                'timeZone': 'America/Los_Angeles'
+                            },
+                            'location': event['location'].strip(),
+                            'description': event['description'].strip()
+                        }
+                        
+                        # Validate datetime format
+                        try:
+                            datetime.datetime.fromisoformat(cleaned_event['start']['dateTime'].replace('Z', '+00:00'))
+                            datetime.datetime.fromisoformat(cleaned_event['end']['dateTime'].replace('Z', '+00:00'))
+                        except ValueError:
+                            print(f"Invalid datetime format in timed event: {cleaned_event}")
+                            continue
 
                     # Validate recurrence rule if present
                     if 'recurrence' in event:
