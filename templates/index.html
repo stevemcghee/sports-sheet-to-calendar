@@ -100,6 +100,75 @@
             font-size: 1.2rem;
             color: #333;
         }
+        
+        /* Debug Log Styles */
+        .debug-log-container {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            background-color: #f8f9fa;
+        }
+        
+        .debug-log {
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .log-entry {
+            margin-bottom: 4px;
+            word-wrap: break-word;
+        }
+        
+        .log-timestamp {
+            color: #6c757d;
+            font-weight: bold;
+        }
+        
+        .log-level {
+            display: inline-block;
+            width: 50px;
+            text-align: center;
+            font-weight: bold;
+            border-radius: 3px;
+            margin: 0 8px;
+        }
+        
+        .log-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .log-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .log-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .log-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .log-debug {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+        
+        .log-message {
+            color: #212529;
+        }
+        
+        .debug-log-container.collapsed {
+            max-height: 50px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -154,12 +223,12 @@
                 <form id="loadForm">
                     <div class="mb-3">
                         <label for="spreadsheetId" class="form-label">Spreadsheet ID</label>
-                        <input type="text" class="form-control" id="spreadsheetId" value="{{ spreadsheet_id }}" required>
-                        <div class="form-text">Using default spreadsheet ID from .env file</div>
+                        <input type="text" class="form-control" id="spreadsheetId" value="1DiA6HTQjDiPzEua_kxcw175C-uMWGnIq_PAKICbiMzQ" required>
+                        <div class="form-text">Default spreadsheet ID loaded</div>
                     </div>
                     <div class="mb-3">
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="useTraditionalParser">
+                            <input class="form-check-input" type="checkbox" id="useTraditionalParser" checked>
                             <label class="form-check-label" for="useTraditionalParser">Use Traditional Parser</label>
                         </div>
                         <div class="form-text">When enabled, uses the traditional parser instead of Gemini AI</div>
@@ -206,12 +275,34 @@
         </div>
 
         <!-- Calendar Preview -->
-        <div class="card">
+        <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Calendar Preview</h5>
                 <div id="calendarPreview">
                     <div class="d-flex align-items-center justify-content-center h-100">
                         <p class="text-muted">Apply changes to see calendar preview</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Log Pane -->
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="card-title mb-0">Debug Log</h5>
+                    <div>
+                        <button id="clearLogBtn" class="btn btn-sm btn-outline-secondary me-2">Clear Log</button>
+                        <button id="toggleLogBtn" class="btn btn-sm btn-outline-primary">Collapse</button>
+                    </div>
+                </div>
+                <div id="debugLogContainer" class="debug-log-container">
+                    <div id="debugLog" class="debug-log">
+                        <div class="log-entry">
+                            <span class="log-timestamp">[<span id="currentTime"></span>]</span>
+                            <span class="log-level log-info">INFO</span>
+                            <span class="log-message">Debug log initialized. Ready to capture events.</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -247,23 +338,78 @@
             const authStatus = document.getElementById('authStatus');
             const authModal = new bootstrap.Modal(document.getElementById('authModal'));
             const authFrame = document.getElementById('authFrame');
+            const debugLog = document.getElementById('debugLog');
+            const clearLogBtn = document.getElementById('clearLogBtn');
+            const toggleLogBtn = document.getElementById('toggleLogBtn');
+            const debugLogContainer = document.getElementById('debugLogContainer');
+
+            // Debug logging functions
+            function log(level, message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-timestamp">[${timestamp}]</span>
+                    <span class="log-level log-${level}">${level.toUpperCase()}</span>
+                    <span class="log-message">${message}</span>
+                `;
+                debugLog.appendChild(logEntry);
+                debugLog.scrollTop = debugLog.scrollHeight;
+            }
+
+            function logInfo(message) { log('info', message); }
+            function logSuccess(message) { log('success', message); }
+            function logWarning(message) { log('warning', message); }
+            function logError(message) { log('error', message); }
+            function logDebug(message) { log('debug', message); }
+
+            // Initialize current time display
+            function updateCurrentTime() {
+                const currentTimeEl = document.getElementById('currentTime');
+                if (currentTimeEl) {
+                    currentTimeEl.textContent = new Date().toLocaleTimeString();
+                }
+            }
+            setInterval(updateCurrentTime, 1000);
+            updateCurrentTime();
+
+            // Debug log controls
+            clearLogBtn.addEventListener('click', function() {
+                debugLog.innerHTML = '';
+                logInfo('Debug log cleared');
+            });
+
+            toggleLogBtn.addEventListener('click', function() {
+                const isCollapsed = debugLogContainer.classList.contains('collapsed');
+                if (isCollapsed) {
+                    debugLogContainer.classList.remove('collapsed');
+                    toggleLogBtn.textContent = 'Collapse';
+                } else {
+                    debugLogContainer.classList.add('collapsed');
+                    toggleLogBtn.textContent = 'Expand';
+                }
+            });
 
             // Check authentication status
             async function checkAuthStatus() {
+                logInfo('Checking authentication status...');
                 try {
                     const response = await fetch('/check_auth');
                     const data = await response.json();
                     
                     if (data.authenticated) {
+                        logSuccess('Authentication successful');
                         authStatus.innerHTML = '<p class="text-success">Authenticated with Google</p>';
                         authButton.style.display = 'none';
                         enableControls();
                     } else {
+                        logWarning('Not authenticated');
                         authStatus.innerHTML = '<p class="text-danger">Not authenticated</p>';
                         authButton.style.display = 'block';
                         disableControls();
                     }
                 } catch (error) {
+                    logError(`Error checking auth status: ${error}`);
                     authStatus.innerHTML = `<p class="text-danger">Error checking auth status: ${error}</p>`;
                     authButton.style.display = 'block';
                     disableControls();
@@ -336,8 +482,17 @@
                 e.preventDefault();
                 const spreadsheetId = document.getElementById('spreadsheetId').value;
                 const useTraditionalParser = document.getElementById('useTraditionalParser').checked;
+                const submitButton = loadForm.querySelector('button[type="submit"]');
+                const originalButtonText = submitButton.innerHTML;
+
+                logInfo(`Starting sheet load - Spreadsheet ID: ${spreadsheetId}, Traditional Parser: ${useTraditionalParser}`);
+
+                // Show loading state
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading Sheet...';
 
                 try {
+                    logDebug('Sending request to /load_sheet');
                     const response = await fetch('/load_sheet', {
                         method: 'POST',
                         headers: {
@@ -350,7 +505,10 @@
                     });
 
                     const data = await response.json();
+                    logDebug(`Response received: ${JSON.stringify(data)}`);
+                    
                     if (data.success) {
+                        logSuccess(`Sheet loaded successfully: ${data.spreadsheet_title}`);
                         // Always update the spreadsheet title
                         const spreadsheetInfo = document.getElementById('spreadsheetInfo');
                         const spreadsheetTitleEl = document.getElementById('spreadsheetTitle');
@@ -358,6 +516,7 @@
                         spreadsheetInfo.style.display = 'block';
 
                         if (data.sheets) {
+                            logInfo(`Found ${data.sheets.length} sheets: ${data.sheets.join(', ')}`);
                             // Create tab buttons
                             sheetTabs.innerHTML = '';
                             
@@ -366,7 +525,7 @@
                             allButton.type = 'button';
                             allButton.className = 'btn btn-outline-primary';
                             allButton.textContent = 'ALL';
-                            allButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, !useTraditionalParser);
+                            allButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
                             sheetTabs.appendChild(allButton);
                             
                             // Add individual sheet buttons
@@ -376,23 +535,31 @@
                                 button.className = 'btn btn-outline-primary';
                                 if (index === 0) button.classList.add('active');
                                 button.textContent = sheet;
-                                button.onclick = () => loadSheetData(spreadsheetId, sheet, !useTraditionalParser);
+                                button.onclick = () => loadSheetData(spreadsheetId, sheet, useTraditionalParser);
                                 sheetTabs.appendChild(button);
                             });
                             sheetTabs.style.display = 'block';
                             
                             // Load first sheet by default
                             if (data.sheets.length > 0) {
-                                loadSheetData(spreadsheetId, data.sheets[0], !useTraditionalParser);
+                                logInfo(`Auto-loading first sheet: ${data.sheets[0]}`);
+                                loadSheetData(spreadsheetId, data.sheets[0], useTraditionalParser);
                             }
                         } else {
+                            logWarning('No sheets found in spreadsheet');
                             sheetTabs.style.display = 'none';
                         }
                     } else {
+                        logError(`Error loading sheet: ${data.error}`);
                         alert('Error loading sheet: ' + data.error);
                     }
                 } catch (error) {
+                    logError(`Network error loading sheet: ${error}`);
                     alert('Error loading sheet: ' + error);
+                } finally {
+                    // Restore button state
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
                 }
             });
 
@@ -421,6 +588,7 @@
             }
 
             async function loadSheetData(spreadsheetId, sheetName, useTraditionalParser) {
+                logInfo(`Loading sheet data - Sheet: ${sheetName}, Traditional Parser: ${useTraditionalParser}`);
                 try {
                     // Show loading spinner in sheet preview
                     const sheetPreview = document.getElementById('sheetPreview');
@@ -434,17 +602,25 @@
                     
                     // Show Gemini progress wheel if using Gemini
                     if (!useTraditionalParser) {
+                        logInfo('Showing Gemini progress overlay');
                         document.getElementById('geminiProgress').style.display = 'flex';
+                    } else {
+                        logDebug('Using traditional parser - no Gemini overlay');
                     }
                     
-                    // Update active tab
+                    // Update active tab and show loading state
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
                         btn.classList.remove('active');
                         if (btn.textContent === sheetName) {
                             btn.classList.add('active');
+                            // Show loading state on active tab
+                            const originalText = btn.textContent;
+                            btn.disabled = true;
+                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
                         }
                     });
 
+                    logDebug(`Sending request for sheet: ${sheetName}`);
                     const response = await fetch('/load_sheet', {
                         method: 'POST',
                         headers: {
@@ -458,8 +634,10 @@
                     });
 
                     const data = await response.json();
+                    logDebug(`Sheet response received: ${JSON.stringify(data)}`);
                     
                     if (data.needs_auth || (data.error && data.error.includes('re-authenticate'))) {
+                        logWarning('Authentication required - redirecting to auth');
                         // Show authentication button and status
                         authButton.style.display = 'block';
                         authStatus.innerHTML = '<p class="text-danger">Authentication required</p>';
@@ -468,21 +646,31 @@
                     }
 
                     if (data.success) {
+                        logSuccess(`Sheet data loaded successfully - Found ${data.events ? data.events.length : 0} events`);
                         // Display the data
-                        displaySheetData(data);
+                        if (data.events) {
+                            displayEvents(data.events, data.spreadsheet_title);
+                        } else {
+                            logWarning('No events found in sheet data');
+                            displayEvents([], data.spreadsheet_title);
+                        }
                     } else {
                         // Check if the error is related to authentication
                         if (data.error && (data.error.includes('expired') || data.error.includes('revoked'))) {
+                            logError('Session expired - authentication required');
                             authButton.style.display = 'block';
                             authStatus.innerHTML = '<p class="text-danger">Your session has expired. Please re-authenticate.</p>';
                             disableControls();
                         } else {
+                            logError(`Error loading sheet data: ${data.error}`);
                             alert('Error loading sheet: ' + data.error);
                         }
                     }
                 } catch (error) {
+                    logError(`Exception in loadSheetData: ${error}`);
                     // Check if the error is related to authentication
                     if (error.message && (error.message.includes('expired') || error.message.includes('revoked'))) {
+                        logError('Session expired - authentication required');
                         authButton.style.display = 'block';
                         authStatus.innerHTML = '<p class="text-danger">Your session has expired. Please re-authenticate.</p>';
                         disableControls();
@@ -490,22 +678,39 @@
                         alert('Error loading sheet: ' + error);
                     }
                 } finally {
+                    logDebug('Cleaning up loadSheetData');
                     hideLoading();
                     if (!useTraditionalParser) {
+                        logDebug('Hiding Gemini progress overlay');
                         document.getElementById('geminiProgress').style.display = 'none';
                     }
+                    
+                    // Restore button states
+                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
+                        if (btn.textContent.includes('spinner-border')) {
+                            // Extract original text (remove spinner and restore)
+                            const originalText = btn.textContent.replace(/<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"><\/span>/, '').trim();
+                            btn.disabled = false;
+                            btn.innerHTML = originalText;
+                        }
+                    });
                 }
             }
 
             async function loadAllSheets(spreadsheetId, sheets, useTraditionalParser) {
+                logInfo(`Loading all sheets - ${sheets.length} sheets, Traditional Parser: ${useTraditionalParser}`);
                 try {
                     showLoading();
                     
-                    // Update active tab
+                    // Update active tab and show loading state
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
                         btn.classList.remove('active');
                         if (btn.textContent === 'ALL') {
                             btn.classList.add('active');
+                            // Show loading state on ALL button
+                            const originalText = btn.textContent;
+                            btn.disabled = true;
+                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
                         }
                     });
 
@@ -514,6 +719,7 @@
                     let spreadsheetTitle = '';
                     
                     for (const sheet of sheets) {
+                        logDebug(`Loading sheet: ${sheet}`);
                         const response = await fetch('/load_sheet', {
                             method: 'POST',
                             headers: {
@@ -532,20 +738,38 @@
                                 spreadsheetTitle = data.spreadsheet_title;
                             }
                             if (data.events) {
+                                logDebug(`Added ${data.events.length} events from sheet: ${sheet}`);
                                 allEvents.push(...data.events);
+                            } else {
+                                logWarning(`No events found in sheet: ${sheet}`);
                             }
+                        } else {
+                            logError(`Failed to load sheet: ${sheet} - ${data.error}`);
                         }
                     }
 
+                    logInfo(`Total events loaded: ${allEvents.length}`);
                     // Sort events by date
                     allEvents.sort((a, b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
 
                     // Display all events
                     displayEvents(allEvents, spreadsheetTitle);
                 } catch (error) {
+                    logError(`Exception in loadAllSheets: ${error}`);
                     alert('Error loading all sheets: ' + error);
                 } finally {
+                    logDebug('Cleaning up loadAllSheets');
                     hideLoading();
+                    
+                    // Restore button states
+                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
+                        if (btn.textContent.includes('spinner-border')) {
+                            // Extract original text (remove spinner and restore)
+                            const originalText = btn.textContent.replace(/<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"><\/span>/, '').trim();
+                            btn.disabled = false;
+                            btn.innerHTML = originalText;
+                        }
+                    });
                 }
             }
 
