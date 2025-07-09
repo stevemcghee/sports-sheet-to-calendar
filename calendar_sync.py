@@ -546,12 +546,26 @@ def create_or_get_sports_calendar(service, calendar_name, description=None):
         calendar = {
             'summary': calendar_name,
             'description': description or f'San Luis Obispo High School {calendar_name} Schedule',
-            'accessRole': 'reader',  # Make calendar public
             'selected': True  # Show in calendar list by default
         }
         created_calendar = service.calendars().insert(body=calendar).execute()
-        logger.info(f"Created new calendar with ID: {created_calendar['id']}")
-        return created_calendar['id']
+        calendar_id = created_calendar['id']
+        logger.info(f"Created new calendar with ID: {calendar_id}")
+        
+        # Make the calendar world-readable by setting ACL
+        try:
+            acl_rule = {
+                'scope': {
+                    'type': 'default'
+                },
+                'role': 'reader'
+            }
+            service.acl().insert(calendarId=calendar_id, body=acl_rule).execute()
+            logger.info(f"Made calendar {calendar_name} world-readable")
+        except Exception as e:
+            logger.warning(f"Could not make calendar world-readable: {str(e)}")
+        
+        return calendar_id
     except Exception as e:
         logger.error(f"Error creating/getting calendar {calendar_name}: {str(e)}")
         raise

@@ -342,6 +342,19 @@ def apply_changes():
             created_calendar = calendar_service.calendars().insert(body=calendar).execute()
             calendar_id = created_calendar['id']
             
+            # Make the calendar world-readable by setting ACL
+            try:
+                acl_rule = {
+                    'scope': {
+                        'type': 'default'
+                    },
+                    'role': 'reader'
+                }
+                calendar_service.acl().insert(calendarId=calendar_id, body=acl_rule).execute()
+                logger.info(f"Made calendar {calendar_name} world-readable")
+            except Exception as e:
+                logger.warning(f"Could not make calendar world-readable: {str(e)}")
+            
             # Add events to calendar
             for event in events:
                 calendar_service.events().insert(
