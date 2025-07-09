@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from calendar_sync import (
-    get_google_credentials, get_spreadsheet_data, parse_sports_events,
+    get_spreadsheet_data, parse_sports_events,
     create_or_get_sports_calendar, update_calendar, get_existing_events,
     events_are_equal, list_available_sheets, get_event_key
 )
@@ -77,30 +77,36 @@ model = genai.GenerativeModel('models/gemini-1.5-pro-latest', safety_settings=sa
 def get_calendar_service():
     try:
         logger.info("Attempting to get Google credentials...")
-        creds = get_google_credentials()
-        if not creds:
-            logger.error("No credentials returned from get_google_credentials()")
-            raise Exception("Failed to get Google credentials")
         
-        if not creds.valid:
-            logger.warning("Credentials are not valid, attempting to refresh...")
-            if creds.expired and creds.refresh_token:
-                try:
-                    creds.refresh(Request())
-                    logger.info("Credentials refreshed successfully")
-                except RefreshError as e:
-                    logger.error(f"Failed to refresh credentials: {str(e)}")
-                    # Delete the invalid token file
-                    if os.path.exists('token.pickle'):
-                        os.remove('token.pickle')
-                        logger.info("Removed invalid token file")
-                    raise Exception("Your Google Calendar access token has expired. Please refresh the page to re-authenticate.")
-            else:
-                logger.error("Credentials are invalid and cannot be refreshed")
-                raise Exception("Invalid credentials. Please refresh the page to re-authenticate.")
+        # Check if user is authenticated via session
+        if 'credentials' not in session:
+            raise Exception('Not authenticated with Google')
+            
+        # Get credentials from session
+        credentials = Credentials(**session['credentials'])
+        
+        # Refresh token if needed
+        if credentials.expired and credentials.refresh_token:
+            try:
+                credentials.refresh(Request())
+                # Update session with new token
+                session['credentials'] = {
+                    'token': credentials.token,
+                    'refresh_token': credentials.refresh_token,
+                    'token_uri': credentials.token_uri,
+                    'client_id': credentials.client_id,
+                    'client_secret': credentials.client_secret,
+                    'scopes': credentials.scopes
+                }
+                logger.info("Credentials refreshed successfully")
+            except RefreshError as e:
+                logger.error(f"Failed to refresh credentials: {str(e)}")
+                # Clear invalid credentials from session
+                session.pop('credentials', None)
+                raise Exception("Your Google Calendar access token has expired. Please refresh the page to re-authenticate.")
         
         logger.info("Building calendar service...")
-        service = build('calendar', 'v3', credentials=creds)
+        service = build('calendar', 'v3', credentials=credentials)
         logger.info("Calendar service built successfully")
         return service
     except Exception as e:
