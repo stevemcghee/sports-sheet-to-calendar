@@ -333,6 +333,10 @@ def apply_changes():
             # Get calendar service
             calendar_service = get_calendar_service()
             
+            # Ensure calendar name has SLOHS prefix
+            if not calendar_name.startswith('SLOHS '):
+                calendar_name = f"SLOHS {calendar_name}"
+            
             # Create or get calendar
             calendar = {
                 'summary': calendar_name,
