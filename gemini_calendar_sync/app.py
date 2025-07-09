@@ -382,5 +382,17 @@ def apply_changes():
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/logout')
+def logout():
+    try:
+        # Clear credentials from session
+        session.pop('credentials', None)
+        logger.info("User logged out successfully")
+        return jsonify({'success': True, 'message': 'Logged out successfully'})
+    except Exception as e:
+        logger.error(f"Error during logout: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)})
+
 if __name__ == '__main__':
     app.run(debug=True) 

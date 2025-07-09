@@ -189,8 +189,20 @@
         <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Authentication Status</h5>
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Important:</strong> Log into the Google account you wish to use for hosting the calendars. Don't use your personal account!
+                </div>
                 <div id="authStatus">
-                    <p class="text-muted">Checking authentication status...</p>
+                </div>
+                <div id="logoutSection" class="mt-2" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <p class="text-success mb-0">Authenticated with Google</p>
+                        <button id="logoutButton" class="btn btn-outline-danger">
+                            <i class="bi bi-box-arrow-right"></i>
+                            Log Out
+                        </button>
+                    </div>
                 </div>
                 <div id="authError" class="alert alert-danger mt-2" style="display: none;"></div>
                 <div id="authUrlContainer" class="mt-2" style="display: none;">
@@ -401,15 +413,15 @@
 
             // Check authentication status
             async function checkAuthStatus() {
-                logInfo('Checking authentication status...');
                 try {
                     const response = await fetch('/check_auth');
                     const data = await response.json();
                     
                     if (data.authenticated) {
                         logSuccess('Authentication successful');
-                        authStatus.innerHTML = '<p class="text-success">Authenticated with Google</p>';
+                        authStatus.innerHTML = '';
                         authButton.style.display = 'none';
+                        document.getElementById('logoutSection').style.display = 'block';
                         enableControls();
                         
                         // Auto-load the default sheet
@@ -418,12 +430,14 @@
                         logWarning('Not authenticated');
                         authStatus.innerHTML = '<p class="text-danger">Not authenticated</p>';
                         authButton.style.display = 'block';
+                        document.getElementById('logoutSection').style.display = 'none';
                         disableControls();
                     }
                 } catch (error) {
                     logError(`Error checking auth status: ${error}`);
                     authStatus.innerHTML = `<p class="text-danger">Error checking auth status: ${error}</p>`;
                     authButton.style.display = 'block';
+                    document.getElementById('logoutSection').style.display = 'none';
                     disableControls();
                 }
             }
@@ -583,6 +597,24 @@
                 previewChangesBtn.disabled = true;
                 applyChangesBtn.disabled = true;
             }
+
+            // Handle logout
+            document.getElementById('logoutButton').addEventListener('click', async function() {
+                try {
+                    logInfo('Logging out...');
+                    const response = await fetch('/logout');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        logSuccess('Logged out successfully');
+                        await checkAuthStatus();
+                    } else {
+                        logError(`Logout failed: ${data.error}`);
+                    }
+                } catch (error) {
+                    logError(`Error during logout: ${error}`);
+                }
+            });
 
             // Initial auth status check
             checkAuthStatus();

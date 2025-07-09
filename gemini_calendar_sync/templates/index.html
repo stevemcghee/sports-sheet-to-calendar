@@ -34,8 +34,21 @@
         <div id="auth-section" class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Google Authentication</h5>
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Important:</strong> Log into the Google account you wish to use for hosting the calendars. Don't use your personal account!
+                </div>
                 <button id="auth-button" class="btn btn-primary">Authenticate with Google</button>
-                <div id="auth-status" class="mt-2"></div>
+                <div id="auth-status" class="mt-2" style="display: none;"></div>
+                <div id="logout-section" class="mt-2" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <p class="text-success mb-0">Authenticated with Google</p>
+                        <button id="logout-button" class="btn btn-outline-danger">
+                            <i class="bi bi-box-arrow-right"></i>
+                            Log Out
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -95,6 +108,7 @@
                         if (event.data === 'auth_complete') {
                             document.getElementById('auth-section').style.display = 'none';
                             document.getElementById('spreadsheet-section').style.display = 'block';
+                            document.getElementById('logout-section').style.display = 'block';
                             showStatus('Authentication successful!', 'success');
                         } else if (event.data === 'auth_error') {
                             showStatus('Authentication failed. Please try again.', 'danger');
@@ -105,6 +119,27 @@
                 }
             } catch (error) {
                 showStatus('Error during authentication: ' + error.message, 'danger');
+            }
+        });
+
+        // Handle logout
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/logout');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('auth-section').style.display = 'block';
+                    document.getElementById('spreadsheet-section').style.display = 'none';
+                    document.getElementById('sheet-selection').style.display = 'none';
+                    document.getElementById('events-section').style.display = 'none';
+                    document.getElementById('logout-section').style.display = 'none';
+                    showStatus('Logged out successfully!', 'success');
+                } else {
+                    showStatus('Logout failed: ' + data.error, 'danger');
+                }
+            } catch (error) {
+                showStatus('Error during logout: ' + error.message, 'danger');
             }
         });
 
