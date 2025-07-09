@@ -42,7 +42,8 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev')
 # OAuth configuration
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
-    'https://www.googleapis.com/auth/calendar'
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/userinfo.email'
 ]
 
 # Configure Gemini
@@ -238,6 +239,9 @@ def setup_credentials():
 @app.route('/auth')
 def auth():
     try:
+        # Clear any existing credentials to force fresh authentication
+        session.pop('credentials', None)
+        
         # Get the redirect URI from the request
         redirect_uri = request.url_root.rstrip('/') + '/auth/callback'
         logger.debug(f"Using redirect URI: {redirect_uri}")
@@ -283,8 +287,32 @@ def auth_callback():
             SCOPES,
             redirect_uri=redirect_uri
         )
-        flow.fetch_token(code=code)
-        creds = flow.credentials
+        
+        # Monkey patch to handle scope changes
+        import oauthlib.oauth2.rfc6749.parameters
+        original_validate = oauthlib.oauth2.rfc6749.parameters.validate_token_parameters
+        
+        def patched_validate(params):
+            try:
+                return original_validate(params)
+            except Exception as e:
+                if "Scope has changed" in str(e):
+                    logger.info("Scope change detected - ignoring validation error")
+                    return None
+                raise e
+        
+        oauthlib.oauth2.rfc6749.parameters.validate_token_parameters = patched_validate
+        
+        try:
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+        except Exception as e:
+            # Restore original function
+            oauthlib.oauth2.rfc6749.parameters.validate_token_parameters = original_validate
+            raise e
+        
+        # Restore original function
+        oauthlib.oauth2.rfc6749.parameters.validate_token_parameters = original_validate
         
         # Save credentials to session
         session['credentials'] = {
@@ -331,9 +359,27 @@ def check_auth():
         has_google_auth = bool(session.get('credentials'))
         has_gemini_key = bool(GEMINI_API_KEY)
         
+        user_email = None
+        if has_google_auth:
+            try:
+                # Get user info from Google API
+                credentials = Credentials(**session['credentials'])
+                logger.info(f"Credentials scopes: {credentials.scopes}")
+                service = build('oauth2', 'v2', credentials=credentials)
+                user_info = service.userinfo().get().execute()
+                user_email = user_info.get('email')
+                logger.info(f"Successfully retrieved user email: {user_email}")
+                logger.info(f"Full user info: {user_info}")
+            except Exception as e:
+                logger.warning(f"Could not get user email: {str(e)}")
+                logger.warning(f"Error type: {type(e)}")
+                logger.warning(f"Error details: {traceback.format_exc()}")
+                user_email = "Unknown User (re-authenticate to see email)"
+        
         return jsonify({
             'authenticated': has_google_auth,
             'has_gemini_key': has_gemini_key,
+            'user_email': user_email,
             'error': None if has_google_auth and has_gemini_key else 'Missing authentication'
         })
     except Exception as e:
@@ -346,6 +392,15 @@ def logout():
     try:
         # Clear credentials from session
         session.pop('credentials', None)
+        
+        # Also clear the token.pickle file if it exists
+        try:
+            if os.path.exists('token.pickle'):
+                os.remove('token.pickle')
+                logger.info("Removed token.pickle file")
+        except Exception as e:
+            logger.warning(f"Could not remove token.pickle: {str(e)}")
+        
         logger.info("User logged out successfully")
         return jsonify({'success': True, 'message': 'Logged out successfully'})
     except Exception as e:
@@ -438,7 +493,10 @@ def load_sheet():
                     events = parse_sports_events(values, sheet_name)
                 else:
                     # Use Gemini parser
+                    logger.info("Starting Gemini parser analysis...")
+                    logger.info(f"Processing {len(values)} rows with Gemini")
                     events = parse_sheet_with_gemini(values)
+                    logger.info(f"Gemini parser completed, found {len(events)} events")
                     if not events:
                         # If Gemini parser returns no events, try traditional parser as fallback
                         logger.warning("Gemini parser returned no events, trying traditional parser")
@@ -529,8 +587,10 @@ def preview_changes():
             events = parse_sports_events(values, sheet_name)
         else:
             logger.info("Using Gemini parser")
+            logger.info(f"Processing {len(values)} rows with Gemini")
             try:
                 events = parse_sheet_with_gemini(values)
+                logger.info(f"Gemini parser completed, found {len(events)} events")
                 if not events:
                     logger.warning("Gemini parser returned no events, falling back to traditional parser")
                     events = parse_sports_events(values, sheet_name)
@@ -589,6 +649,7 @@ def preview_changes():
 
 @app.route('/apply_changes', methods=['POST'])
 def apply_changes():
+    print("DEBUG: apply_changes route called")  # This will show in console
     # Set up log capture
     class CaptureLogHandler(logging.Handler):
         def __init__(self):
@@ -605,7 +666,10 @@ def apply_changes():
     capture_handler.setFormatter(formatter)
     
     # Add the handler to the logger
-    logger.addHandler(capture_handler)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(capture_handler)
+    logger.info("Log capture handler set up successfully for apply_changes route")
     
     try:
         data = request.get_json()
@@ -618,6 +682,10 @@ def apply_changes():
 
         logger.info("Starting apply_changes route")
         logger.info("TEST LOG: This should appear in debug logs")
+        logger.info(f"Received data: {data}")
+        logger.info(f"Spreadsheet ID: {spreadsheet_id}")
+        logger.info(f"Sheet name: {sheet_name}")
+        logger.info(f"Use traditional parser: {use_traditional_parser}")
         service = get_calendar_service()
         calendar_name = f"SLOHS {sheet_name}"
         logger.info(f"Using calendar name: {calendar_name}")
@@ -640,8 +708,10 @@ def apply_changes():
             events = parse_sports_events(values, sheet_name)
         else:
             logger.info("Using Gemini parser")
+            logger.info(f"Processing {len(values)} rows with Gemini")
             try:
                 events = parse_sheet_with_gemini(values)
+                logger.info(f"Gemini parser completed, found {len(events)} events")
                 if not events:
                     logger.warning("Gemini parser returned no events, falling back to traditional parser")
                     events = parse_sports_events(values, sheet_name)
@@ -795,7 +865,7 @@ def apply_changes():
         }), 400
     finally:
         # Remove the handler to avoid duplicate logs
-        logger.removeHandler(capture_handler)
+        root_logger.removeHandler(capture_handler)
 
 @app.route('/apply_all_sheets', methods=['POST'])
 def apply_all_sheets():
@@ -816,7 +886,9 @@ def apply_all_sheets():
     capture_handler.setFormatter(formatter)
     
     # Add the handler to the logger
-    logger.addHandler(capture_handler)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(capture_handler)
     
     try:
         data = request.get_json()
@@ -966,7 +1038,272 @@ def apply_all_sheets():
         }), 400
     finally:
         # Remove the handler to avoid duplicate logs
-        logger.removeHandler(capture_handler)
+        root_logger.removeHandler(capture_handler)
+
+@app.route('/apply_all_to_master_calendar', methods=['POST'])
+def apply_all_to_master_calendar():
+    """Create or update a calendar called 'SLOHS All Sports' with all events from all sheets."""
+    class CaptureLogHandler(logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.logs = []
+        def emit(self, record):
+            log_entry = self.format(record)
+            self.logs.append(log_entry)
+    capture_handler = CaptureLogHandler()
+    capture_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    capture_handler.setFormatter(formatter)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(capture_handler)
+    try:
+        data = request.get_json()
+        spreadsheet_id = data.get('spreadsheet_id')
+        use_traditional_parser = data.get('use_traditional_parser', False)
+        if not spreadsheet_id:
+            return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
+        logger.info("Starting apply_all_to_master_calendar route")
+        service = get_calendar_service()
+        credentials = Credentials(**session['credentials'])
+        sheets_service = build('sheets', 'v4', credentials=credentials)
+        # Get all available sheets
+        available_sheets = list_available_sheets(sheets_service, spreadsheet_id)
+        if not available_sheets:
+            return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'})
+        all_events = []
+        for sheet_name in available_sheets:
+            values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
+            if not values:
+                continue
+            if use_traditional_parser:
+                events = parse_sports_events(values, sheet_name)
+            else:
+                try:
+                    events = parse_sheet_with_gemini(values)
+                    if not events:
+                        events = parse_sports_events(values, sheet_name)
+                except Exception as e:
+                    logger.error(f"Error using Gemini parser for {sheet_name}: {str(e)}")
+                    events = parse_sports_events(values, sheet_name)
+            if events:
+                all_events.extend(events)
+        # Create or get the 'SLOHS All Sports' calendar
+        calendar_name = 'SLOHS All Sports'
+        calendar_id = create_or_get_sports_calendar(service, calendar_name)
+        logger.info(f"Updating '{calendar_name}' calendar with {len(all_events)} events")
+        deleted, inserted, changed = update_calendar(service, all_events, calendar_id)
+        logger.info(f"{calendar_name} calendar: {inserted} created, {changed} updated, {deleted} deleted")
+        return jsonify({
+            'success': True,
+            'calendar_name': calendar_name,
+            'events_created': inserted,
+            'events_updated': changed,
+            'events_deleted': deleted,
+            'total_events': len(all_events),
+            'debug_logs': capture_handler.logs
+        })
+    except Exception as e:
+        logger.error(f"Error in apply_all_to_master_calendar: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e), 'debug_logs': capture_handler.logs}), 400
+    finally:
+        root_logger.removeHandler(capture_handler)
+
+@app.route('/preview_all_sheets', methods=['POST'])
+def preview_all_sheets():
+    """Preview all events from all sheets that would be added to the 'SLOHS All Sports' calendar."""
+    class CaptureLogHandler(logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.logs = []
+        def emit(self, record):
+            log_entry = self.format(record)
+            self.logs.append(log_entry)
+    capture_handler = CaptureLogHandler()
+    capture_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    capture_handler.setFormatter(formatter)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(capture_handler)
+    try:
+        data = request.get_json()
+        spreadsheet_id = data.get('spreadsheet_id')
+        use_traditional_parser = data.get('use_traditional_parser', False)
+        if not spreadsheet_id:
+            return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
+        logger.info("Starting preview_all_sheets route")
+        credentials = Credentials(**session['credentials'])
+        sheets_service = build('sheets', 'v4', credentials=credentials)
+        # Get all available sheets
+        available_sheets = list_available_sheets(sheets_service, spreadsheet_id)
+        if not available_sheets:
+            return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'})
+        all_events = []
+        for sheet_name in available_sheets:
+            values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
+            if not values:
+                continue
+            if use_traditional_parser:
+                events = parse_sports_events(values, sheet_name)
+            else:
+                try:
+                    events = parse_sheet_with_gemini(values)
+                    if not events:
+                        events = parse_sports_events(values, sheet_name)
+                except Exception as e:
+                    logger.error(f"Error using Gemini parser for {sheet_name}: {str(e)}")
+                    events = parse_sports_events(values, sheet_name)
+            if events:
+                all_events.extend(events)
+        logger.info(f"Preview: Found {len(all_events)} events from all sheets")
+        return jsonify({
+            'success': True,
+            'events': all_events,
+            'total_events': len(all_events),
+            'debug_logs': capture_handler.logs
+        })
+    except Exception as e:
+        logger.error(f"Error in preview_all_sheets: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e), 'debug_logs': capture_handler.logs}), 400
+    finally:
+        root_logger.removeHandler(capture_handler)
+
+@app.route('/get_slohs_calendars', methods=['GET'])
+def get_slohs_calendars():
+    """Get all SLOHS calendars for the logged-in user."""
+    try:
+        service = get_calendar_service()
+        
+        # Get all calendars for the user
+        calendar_list = service.calendarList().list().execute()
+        slohs_calendars = []
+        
+        for calendar in calendar_list.get('items', []):
+            calendar_name = calendar.get('summary', '')
+            if calendar_name.startswith('SLOHS '):
+                calendar_id = calendar['id']
+                
+                # Get the first event to determine the start month
+                try:
+                    events_result = service.events().list(
+                        calendarId=calendar_id,
+                        timeMin=datetime.now().isoformat() + 'Z',
+                        maxResults=1,
+                        orderBy='startTime',
+                        singleEvents=True
+                    ).execute()
+                    
+                    first_event_date = None
+                    if events_result.get('items'):
+                        event = events_result['items'][0]
+                        if 'dateTime' in event['start']:
+                            first_event_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
+                        elif 'date' in event['start']:
+                            first_event_date = datetime.fromisoformat(event['start']['date'])
+                    
+                    slohs_calendars.append({
+                        'id': calendar_id,
+                        'name': calendar_name,
+                        'first_event_date': first_event_date.isoformat() if first_event_date else None
+                    })
+                except Exception as e:
+                    logger.error(f"Error getting events for calendar {calendar_name}: {str(e)}")
+                    # Still include the calendar even if we can't get events
+                    slohs_calendars.append({
+                        'id': calendar_id,
+                        'name': calendar_name,
+                        'first_event_date': None
+                    })
+        
+        return jsonify({
+            'success': True,
+            'calendars': slohs_calendars
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_slohs_calendars: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/get_current_calendar', methods=['POST'])
+def get_current_calendar():
+    """Get current calendar events for preview."""
+    try:
+        data = request.get_json()
+        sheet_name = data.get('sheet_name')
+        
+        if not sheet_name:
+            return jsonify({'success': False, 'error': 'Sheet name is required'})
+
+        service = get_calendar_service()
+        calendar_name = f"SLOHS {sheet_name}"
+        
+        # Try to get existing calendar
+        try:
+            calendar_id = create_or_get_sports_calendar(service, calendar_name)
+        except Exception as e:
+            # If calendar doesn't exist yet, return empty list
+            return jsonify({
+                'success': True,
+                'events': [],
+                'calendar_name': calendar_name,
+                'message': 'Calendar does not exist yet'
+            })
+        
+        # Get existing events
+        existing_events = get_existing_events(service, calendar_id)
+        
+        # Convert to list if it's a dictionary
+        if isinstance(existing_events, dict):
+            existing_events = list(existing_events.values())
+        
+        # Format events for response
+        formatted_events = []
+        for event in existing_events:
+            try:
+                if not isinstance(event, dict):
+                    continue
+                
+                # Handle both timed and all-day events
+                if 'dateTime' in event['start']:
+                    start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
+                    formatted_date = start_date.strftime('%a, %b %d, %Y %I:%M %p')
+                elif 'date' in event['start']:
+                    start_date = datetime.fromisoformat(event['start']['date'])
+                    formatted_date = start_date.strftime('%a, %b %d, %Y') + ' (All Day)'
+                else:
+                    continue
+                
+                formatted_events.append({
+                    'summary': event['summary'],
+                    'location': event.get('location', 'N/A'),
+                    'transportation': event.get('transportation', 'N/A'),
+                    'release_time': event.get('release_time', 'N/A'),
+                    'departure_time': event.get('departure_time', 'N/A'),
+                    'formatted_date': formatted_date
+                })
+                
+            except Exception as e:
+                logger.error(f"Error formatting event: {str(e)}")
+                continue
+        
+        # Sort events by date
+        formatted_events.sort(key=lambda x: datetime.strptime(x['formatted_date'].split(' (')[0], '%a, %b %d, %Y %I:%M %p') if ' (All Day)' not in x['formatted_date'] else datetime.strptime(x['formatted_date'].replace(' (All Day)', ''), '%a, %b %d, %Y'))
+        
+        return jsonify({
+            'success': True,
+            'events': formatted_events,
+            'calendar_name': calendar_name,
+            'total_events': len(formatted_events)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_current_calendar: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True) 

@@ -169,6 +169,228 @@
             max-height: 50px;
             overflow: hidden;
         }
+        
+        /* Enhanced log structure styles */
+        .log-entry {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 6px;
+            padding: 4px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .log-timestamp {
+            color: #6c757d;
+            font-weight: bold;
+            min-width: 80px;
+            font-size: 11px;
+        }
+        
+        .log-level {
+            display: inline-block;
+            width: 60px;
+            text-align: center;
+            font-weight: bold;
+            border-radius: 3px;
+            margin: 0 8px;
+            font-size: 10px;
+            padding: 2px 4px;
+        }
+        
+        .log-message {
+            color: #212529;
+            flex: 1;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        
+        .server-log-entry {
+            background-color: #f8f9fa;
+            border-left: 3px solid #dee2e6;
+            padding-left: 8px;
+            margin-left: 10px;
+        }
+        
+        .log-prefix {
+            color: #6c757d;
+            font-family: monospace;
+            margin-right: 4px;
+        }
+        
+        .log-content {
+            color: #212529;
+        }
+        
+        /* Tree structure for server logs */
+        .server-log-entry .log-message {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
+        
+        /* JSON response styling */
+        .json-response {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 8px;
+            margin: 4px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            line-height: 1.3;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        /* Progress tracking styles */
+        .progress-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            display: none;
+        }
+        
+        .progress-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            min-width: 500px;
+            max-width: 80%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .progress-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .progress-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .progress-subtitle {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .progress-bar-container {
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            height: 25px;
+            border-radius: 12px;
+            background-color: #e9ecef;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            transition: width 0.3s ease;
+            border-radius: 12px;
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .progress-details {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }
+        
+        .progress-step {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        
+        .progress-step.completed {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .progress-step.current {
+            background-color: #cce5ff;
+            color: #004085;
+        }
+        
+        .progress-step.pending {
+            background-color: #f8f9fa;
+            color: #6c757d;
+        }
+        
+        .progress-step-icon {
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .progress-step-text {
+            flex: 1;
+        }
+        
+        .progress-step-count {
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .progress-cancel-btn {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .json-key {
+            color: #0066cc;
+            font-weight: bold;
+        }
+        
+        .json-string {
+            color: #008800;
+        }
+        
+        .json-number {
+            color: #cc6600;
+        }
+        
+        .json-boolean {
+            color: #cc0066;
+        }
+        
+        .json-null {
+            color: #999999;
+        }
+        
+        .json-bracket {
+            color: #666666;
+        }
+        
+        .json-indent {
+            display: inline-block;
+            white-space: pre;
+            font-family: 'Courier New', monospace;
+        }
     </style>
 </head>
 <body>
@@ -193,11 +415,9 @@
                     <i class="bi bi-info-circle"></i>
                     <strong>Important:</strong> Log into the Google account you wish to use for hosting the calendars. Don't use your personal account!
                 </div>
-                <div id="authStatus">
-                </div>
                 <div id="logoutSection" class="mt-2" style="display: none;">
                     <div class="d-flex justify-content-between align-items-center">
-                        <p class="text-success mb-0">Authenticated with Google</p>
+                        <div id="authStatus"></div>
                         <button id="logoutButton" class="btn btn-outline-danger">
                             <i class="bi bi-box-arrow-right"></i>
                             Log Out
@@ -205,15 +425,7 @@
                     </div>
                 </div>
                 <div id="authError" class="alert alert-danger mt-2" style="display: none;"></div>
-                <div id="authUrlContainer" class="mt-2" style="display: none;">
-                    <p>Please visit this URL to authenticate:</p>
-                    <div class="input-group">
-                        <input type="text" id="authUrl" class="form-control" readonly>
-                        <button class="btn btn-outline-secondary" type="button" onclick="copyAuthUrl()">
-                            <i class="bi bi-clipboard"></i>
-                        </button>
-                    </div>
-                </div>
+
                 <button id="authButton" class="btn btn-primary mt-2" style="display: none;">
                     Authenticate with Google
                 </button>
@@ -286,9 +498,33 @@
         <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Calendar Preview</h5>
+                <div class="mb-3">
+                    <button id="loadCurrentCalendarBtn" class="btn btn-outline-primary btn-sm" disabled>
+                        <i class="bi bi-calendar-check"></i> Load Current Calendar
+                    </button>
+                </div>
                 <div id="calendarPreview">
                     <div class="d-flex align-items-center justify-content-center h-100">
-                        <p class="text-muted">Apply changes to see calendar preview</p>
+                        <p class="text-muted">Click "Load Current Calendar" to see current calendar events</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLOHS Calendar Index -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-calendar3"></i>
+                    Your SLOHS Calendars
+                </h5>
+                <p class="text-muted">All calendars created by this system that start with "SLOHS"</p>
+                <div id="calendarIndex">
+                    <div class="d-flex align-items-center justify-content-center h-100">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="ms-2">Loading calendars...</span>
                     </div>
                 </div>
             </div>
@@ -297,9 +533,18 @@
         <!-- Debug Log Pane -->
         <div class="card">
             <div class="card-body">
+                <!-- Add filter dropdown above debug log -->
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h5 class="card-title mb-0">Debug Log</h5>
                     <div>
+                        <label for="logLevelFilter" class="form-label me-2 mb-0">Log Level:</label>
+                        <select id="logLevelFilter" class="form-select form-select-sm d-inline-block w-auto me-2">
+                            <option value="ALL">ALL</option>
+                            <option value="DEBUG">DEBUG</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
                         <button id="clearLogBtn" class="btn btn-sm btn-outline-secondary me-2">Clear Log</button>
                         <button id="toggleLogBtn" class="btn btn-sm btn-outline-primary">Collapse</button>
                     </div>
@@ -313,6 +558,36 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Overlay -->
+    <div class="progress-overlay" id="progressOverlay">
+        <div class="progress-modal">
+            <div class="progress-header">
+                <div class="progress-title">Generating All Calendars</div>
+                <div class="progress-subtitle">This may take several minutes...</div>
+            </div>
+            
+            <div class="progress-bar-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <div class="progress-text" id="progressText">0% Complete</div>
+            </div>
+            
+            <div class="progress-details" id="progressDetails">
+                <div class="progress-step pending">
+                    <div class="progress-step-icon">⏳</div>
+                    <div class="progress-step-text">Initializing...</div>
+                </div>
+            </div>
+            
+            <div class="progress-cancel-btn">
+                <button type="button" class="btn btn-outline-danger" id="cancelProgressBtn">
+                    <i class="bi bi-x-circle"></i> Cancel Operation
+                </button>
             </div>
         </div>
     </div>
@@ -353,16 +628,7 @@
 
             // Debug logging functions
             function log(level, message) {
-                const timestamp = new Date().toLocaleTimeString();
-                const logEntry = document.createElement('div');
-                logEntry.className = 'log-entry';
-                logEntry.innerHTML = `
-                    <span class="log-timestamp">[${timestamp}]</span>
-                    <span class="log-level log-${level}">${level.toUpperCase()}</span>
-                    <span class="log-message">${message}</span>
-                `;
-                debugLog.appendChild(logEntry);
-                debugLog.scrollTop = debugLog.scrollHeight;
+                logWithJSON(level, message);
             }
 
             function logInfo(message) { log('info', message); }
@@ -382,6 +648,223 @@
                 // Extract the message part after the log level
                 const match = logEntry.match(/\s-\s\w+\s-\s(.+)/);
                 return match ? match[1] : logEntry;
+            }
+
+            // Enhanced server log rendering with JSON structure
+            function renderServerLogs(logs) {
+                if (!logs || logs.length === 0) return;
+                
+                logInfo(`📋 Server logs (${logs.length} entries):`);
+                logInfo('┌─────────────────────────────────────────────────────────────────');
+                
+                logs.forEach((log, index) => {
+                    const logLevel = parseLogLevel(log);
+                    const logMessage = extractLogMessage(log);
+                    const isLast = index === logs.length - 1;
+                    const prefix = isLast ? '└─ ' : '├─ ';
+                    
+                    // Check if this log message contains JSON
+                    const formattedMessage = formatJSONResponse(logMessage);
+                    const isJSON = formattedMessage !== logMessage;
+                    
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'log-entry server-log-entry';
+                    
+                    if (isJSON) {
+                        logEntry.innerHTML = `
+                            <div class="log-timestamp">[${new Date().toLocaleTimeString()}]</div>
+                            <div class="log-level log-${logLevel.toLowerCase()}">${logLevel}</div>
+                            <div class="log-message">
+                                <span class="log-prefix">${prefix}</span>
+                                <div class="json-response">${formattedMessage}</div>
+                            </div>
+                        `;
+                    } else {
+                        logEntry.innerHTML = `
+                            <div class="log-timestamp">[${new Date().toLocaleTimeString()}]</div>
+                            <div class="log-level log-${logLevel.toLowerCase()}">${logLevel}</div>
+                            <div class="log-message">
+                                <span class="log-prefix">${prefix}</span>
+                                <span class="log-content">${logMessage}</span>
+                            </div>
+                        `;
+                    }
+                    debugLog.appendChild(logEntry);
+                });
+                
+                logInfo('└─────────────────────────────────────────────────────────────────');
+                debugLog.scrollTop = debugLog.scrollHeight;
+            }
+            
+            // Format JSON responses with syntax highlighting
+            function formatJSONResponse(message) {
+                try {
+                    // First, try to parse the entire message as JSON
+                    const jsonObj = JSON.parse(message);
+                    return formatJSON(jsonObj, 0);
+                } catch (e) {
+                    // If that fails, try to extract JSON from within the message
+                    if (message.includes('{') && message.includes('}')) {
+                        const jsonMatch = message.match(/\{.*\}/s);
+                        if (jsonMatch) {
+                            try {
+                                const jsonStr = jsonMatch[0];
+                                const jsonObj = JSON.parse(jsonStr);
+                                return formatJSON(jsonObj, 0);
+                            } catch (e2) {
+                                return message;
+                            }
+                        }
+                    }
+                    return message;
+                }
+            }
+            
+            function formatJSON(obj, indent = 0) {
+                const spaces = '  '.repeat(indent);
+                const indentSpaces = '  '.repeat(indent + 1);
+                
+                if (obj === null) {
+                    return `<span class="json-null">null</span>`;
+                }
+                if (typeof obj === 'boolean') {
+                    return `<span class="json-boolean">${obj}</span>`;
+                }
+                if (typeof obj === 'number') {
+                    return `<span class="json-number">${obj}</span>`;
+                }
+                if (typeof obj === 'string') {
+                    return `<span class="json-string">"${obj}"</span>`;
+                }
+                if (Array.isArray(obj)) {
+                    if (obj.length === 0) {
+                        return `<span class="json-bracket">[]</span>`;
+                    }
+                    let result = `<span class="json-bracket">[</span><br>`;
+                    obj.forEach((item, index) => {
+                        result += `<span class="json-indent">${indentSpaces}</span>${formatJSON(item, indent + 1)}`;
+                        if (index < obj.length - 1) result += ',';
+                        result += '<br>';
+                    });
+                    result += `<span class="json-indent">${spaces}</span><span class="json-bracket">]</span>`;
+                    return result;
+                }
+                if (typeof obj === 'object') {
+                    const keys = Object.keys(obj);
+                    if (keys.length === 0) {
+                        return `<span class="json-bracket">{}</span>`;
+                    }
+                    let result = `<span class="json-bracket">{</span><br>`;
+                    keys.forEach((key, index) => {
+                        result += `<span class="json-indent">${indentSpaces}</span><span class="json-key">"${key}"</span>: ${formatJSON(obj[key], indent + 1)}`;
+                        if (index < keys.length - 1) result += ',';
+                        result += '<br>';
+                    });
+                    result += `<span class="json-indent">${spaces}</span><span class="json-bracket">}</span>`;
+                    return result;
+                }
+                return obj;
+            }
+            
+            // Progress tracking variables
+            let progressCancelled = false;
+            let progressSteps = [];
+            let currentStep = 0;
+            
+            // Progress tracking functions
+            function showProgress() {
+                document.getElementById('progressOverlay').style.display = 'block';
+                progressCancelled = false;
+                currentStep = 0;
+                updateProgress(0, 'Initializing...');
+            }
+            
+            function hideProgress() {
+                document.getElementById('progressOverlay').style.display = 'none';
+            }
+            
+            function updateProgress(percentage, message) {
+                const progressFill = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
+                
+                progressFill.style.width = `${percentage}%`;
+                progressText.textContent = `${Math.round(percentage)}% Complete`;
+                
+                // Add message to progress details
+                if (message) {
+                    addProgressStep(message);
+                }
+            }
+            
+            function addProgressStep(message, status = 'current') {
+                const progressDetails = document.getElementById('progressDetails');
+                const stepDiv = document.createElement('div');
+                stepDiv.className = `progress-step ${status}`;
+                
+                let icon = '⏳';
+                if (status === 'completed') icon = '✅';
+                else if (status === 'current') icon = '🔄';
+                else if (status === 'error') icon = '❌';
+                
+                stepDiv.innerHTML = `
+                    <div class="progress-step-icon">${icon}</div>
+                    <div class="progress-step-text">${message}</div>
+                `;
+                
+                progressDetails.appendChild(stepDiv);
+                progressDetails.scrollTop = progressDetails.scrollHeight;
+            }
+            
+            function completeProgressStep(message) {
+                // Update the last step to completed
+                const steps = document.querySelectorAll('.progress-step');
+                if (steps.length > 0) {
+                    const lastStep = steps[steps.length - 1];
+                    lastStep.className = 'progress-step completed';
+                    const icon = lastStep.querySelector('.progress-step-icon');
+                    if (icon) icon.textContent = '✅';
+                }
+                
+                // Add new current step
+                if (message) {
+                    addProgressStep(message, 'current');
+                }
+            }
+            
+            function setProgressError(message) {
+                addProgressStep(message, 'error');
+            }
+            
+            // Enhanced log function to handle JSON responses
+            function logWithJSON(level, message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                
+                // Check if this is a JSON response
+                const isJSONResponse = message.includes('Sheet response received:') || 
+                                     message.includes('Response data:') ||
+                                     message.includes('Auto-load response received:') ||
+                                     (message.trim().startsWith('{') && message.trim().endsWith('}'));
+                
+                if (isJSONResponse) {
+                    const formattedJSON = formatJSONResponse(message);
+                    logEntry.innerHTML = `
+                        <div class="log-timestamp">[${timestamp}]</div>
+                        <div class="log-level log-${level}">${level.toUpperCase()}</div>
+                        <div class="log-message">
+                            <div class="json-response">${formattedJSON}</div>
+                        </div>
+                    `;
+                } else {
+                    logEntry.innerHTML = `
+                        <div class="log-timestamp">[${timestamp}]</div>
+                        <div class="log-level log-${level}">${level.toUpperCase()}</div>
+                        <div class="log-message">${message}</div>
+                    `;
+                }
+                debugLog.appendChild(logEntry);
+                debugLog.scrollTop = debugLog.scrollHeight;
             }
 
             // Initialize current time display
@@ -418,11 +901,23 @@
                     const data = await response.json();
                     
                     if (data.authenticated) {
-                        logSuccess('Authentication successful');
-                        authStatus.innerHTML = '';
+                        let statusHtml = '';
+                        if (data.user_email) {
+                            if (data.user_email.includes('Unknown User')) {
+                                statusHtml += `<span class="text-warning">Logged in as <b>${data.user_email}</b></span>`;
+                                statusHtml += `<br><small class="text-muted">Click logout and re-authenticate to see your email</small>`;
+                                statusHtml += `<br><button class="btn btn-sm btn-outline-warning mt-2" onclick="forceReauth()">Force Re-authentication</button>`;
+                            } else {
+                                statusHtml += `<span class="text-primary">Logged in as <b>${data.user_email}</b></span>`;
+                            }
+                        }
+                        authStatus.innerHTML = statusHtml;
                         authButton.style.display = 'none';
                         document.getElementById('logoutSection').style.display = 'block';
                         enableControls();
+                        
+                        // Load SLOHS calendars after successful authentication
+                        loadSLOHSCalendars();
                         
                         // Auto-load the default sheet
                         await autoLoadDefaultSheet();
@@ -494,11 +989,11 @@
                                 sheetTabs.appendChild(button);
                             });
                             
-                            // Add Master Calendar button at the end
+                            // Add All Sports button at the end
                             const masterButton = document.createElement('button');
                             masterButton.type = 'button';
-                            masterButton.className = 'btn btn-outline-primary';
-                            masterButton.textContent = 'Master Calendar';
+                            masterButton.className = 'btn btn-success';
+                            masterButton.textContent = 'All Sports';
                             masterButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
                             sheetTabs.appendChild(masterButton);
                             
@@ -507,7 +1002,7 @@
                             generateAllRow.className = 'row mt-3';
                             generateAllRow.innerHTML = `
                                 <div class="col-12">
-                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', ${JSON.stringify(data.sheets)}, ${useTraditionalParser})">
+                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', '${data.sheets.join(',')}', ${useTraditionalParser})">
                                         <i class="bi bi-calendar-plus"></i>
                                         Generate All Calendars
                                     </button>
@@ -546,16 +1041,7 @@
                     const data = await response.json();
                     
                     if (data.success) {
-                        // Show the auth URL
-                        const authUrlContainer = document.getElementById('authUrlContainer');
-                        const authUrl = document.getElementById('authUrl');
-                        const authError = document.getElementById('authError');
-                        
-                        authUrl.value = data.auth_url;
-                        authUrlContainer.style.display = 'block';
-                        authError.style.display = 'none';
-                        
-                        // Open in new tab
+                        // Open auth URL in new tab
                         window.open(data.auth_url, '_blank');
                     } else {
                         const authError = document.getElementById('authError');
@@ -569,12 +1055,7 @@
                 }
             });
 
-            function copyAuthUrl() {
-                const authUrl = document.getElementById('authUrl');
-                authUrl.select();
-                document.execCommand('copy');
-                alert('Auth URL copied to clipboard!');
-            }
+
 
             // Handle auth callback
             window.addEventListener('message', async function(event) {
@@ -590,13 +1071,33 @@
             function enableControls() {
                 loadForm.querySelector('button').disabled = false;
                 previewChangesBtn.disabled = false;
+                document.getElementById('loadCurrentCalendarBtn').disabled = false;
             }
 
             function disableControls() {
                 loadForm.querySelector('button').disabled = true;
                 previewChangesBtn.disabled = true;
                 applyChangesBtn.disabled = true;
+                document.getElementById('loadCurrentCalendarBtn').disabled = true;
             }
+
+            // Force re-authentication function
+            window.forceReauth = async function() {
+                try {
+                    logInfo('Force re-authenticating...');
+                    const response = await fetch('/logout');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        logSuccess('Logged out successfully');
+                        await checkAuthStatus();
+                    } else {
+                        logError(`Logout failed: ${data.error}`);
+                    }
+                } catch (error) {
+                    logError(`Error during force re-auth: ${error}`);
+                }
+            };
 
             // Handle logout
             document.getElementById('logoutButton').addEventListener('click', async function() {
@@ -672,11 +1173,11 @@
                                 sheetTabs.appendChild(button);
                             });
                             
-                            // Add Master Calendar button at the end
+                            // Add All Sports button at the end
                             const masterButton = document.createElement('button');
                             masterButton.type = 'button';
-                            masterButton.className = 'btn btn-outline-primary';
-                            masterButton.textContent = 'Master Calendar';
+                            masterButton.className = 'btn btn-success';
+                            masterButton.textContent = 'All Sports';
                             masterButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
                             sheetTabs.appendChild(masterButton);
                             
@@ -685,7 +1186,7 @@
                             generateAllRow.className = 'row mt-3';
                             generateAllRow.innerHTML = `
                                 <div class="col-12">
-                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', ${JSON.stringify(data.sheets)}, ${useTraditionalParser})">
+                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', '${data.sheets.join(',')}', ${useTraditionalParser})">
                                         <i class="bi bi-calendar-plus"></i>
                                         Generate All Calendars
                                     </button>
@@ -745,8 +1246,13 @@
                 if (contentArea) contentArea.style.display = 'block';
             }
 
-            async function loadSheetData(spreadsheetId, sheetName, useTraditionalParser) {
+            // Make loadSheetData globally accessible
+            window.loadSheetData = async function(spreadsheetId, sheetName, useTraditionalParser) {
                 logInfo(`Loading sheet data - Sheet: ${sheetName}, Traditional Parser: ${useTraditionalParser}`);
+                
+                // Clear the "Sport: " line while loading
+                setCurrentSheetName('');
+                
                 try {
                     // Show loading spinner in sheet preview
                     const sheetPreview = document.getElementById('sheetPreview');
@@ -809,23 +1315,7 @@
                         
                         // Display debug logs if available
                         if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
-                            data.debug_logs.forEach(log => {
-                                // Parse the log level from the server log entry
-                                const logLevel = parseLogLevel(log);
-                                const logMessage = extractLogMessage(log);
-                                
-                                // Display with appropriate level
-                                if (logLevel === 'ERROR') {
-                                    logError(logMessage);
-                                } else if (logLevel === 'WARNING') {
-                                    logWarning(logMessage);
-                                } else if (logLevel === 'INFO') {
-                                    logInfo(logMessage);
-                                } else {
-                                    logDebug(logMessage);
-                                }
-                            });
+                            renderServerLogs(data.debug_logs);
                         }
                         
                         // Display the data
@@ -839,23 +1329,7 @@
                     } else {
                         // Display debug logs if available (even in error case)
                         if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
-                            data.debug_logs.forEach(log => {
-                                // Parse the log level from the server log entry
-                                const logLevel = parseLogLevel(log);
-                                const logMessage = extractLogMessage(log);
-                                
-                                // Display with appropriate level
-                                if (logLevel === 'ERROR') {
-                                    logError(logMessage);
-                                } else if (logLevel === 'WARNING') {
-                                    logWarning(logMessage);
-                                } else if (logLevel === 'INFO') {
-                                    logInfo(logMessage);
-                                } else {
-                                    logDebug(logMessage);
-                                }
-                            });
+                            renderServerLogs(data.debug_logs);
                         }
                         
                         // Check if the error is related to authentication
@@ -900,15 +1374,20 @@
                 }
             }
 
-            async function loadAllSheets(spreadsheetId, sheets, useTraditionalParser) {
+            // Make loadAllSheets globally accessible
+            window.loadAllSheets = async function(spreadsheetId, sheets, useTraditionalParser) {
                 logInfo(`Loading all sheets - ${sheets.length} sheets, Traditional Parser: ${useTraditionalParser}`);
+                
+                // Clear the "Sport: " line while loading
+                setCurrentSheetName('');
+                
                 try {
                     showLoading();
                     
                     // Update active tab and show loading state
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
                         btn.classList.remove('active');
-                        if (btn.textContent === 'ALL') {
+                        if (btn.textContent === 'All Sports') {
                             btn.classList.add('active');
                             // Show loading state on ALL button
                             const originalText = btn.textContent;
@@ -958,7 +1437,7 @@
 
                     // Display all events
                     displayEvents(allEvents, spreadsheetTitle);
-                    setCurrentSheetName('Master Calendar');
+                    setCurrentSheetName('All Sports');
                 } catch (error) {
                     logError(`Exception in loadAllSheets: ${error}`);
                     alert('Error loading all sheets: ' + error);
@@ -978,7 +1457,10 @@
                 }
             }
 
-            async function applyAllSheets(spreadsheetId, sheets, useTraditionalParser) {
+            // Make applyAllSheets globally accessible
+            window.applyAllSheets = async function(spreadsheetId, sheetsParam, useTraditionalParser) {
+                // Handle both array and comma-separated string
+                const sheets = Array.isArray(sheetsParam) ? sheetsParam : sheetsParam.split(',');
                 logInfo(`🚀 Starting bulk apply operation for ${sheets.length} sheets`);
                 logInfo(`📋 Sheets to process: ${sheets.join(', ')}`);
                 logInfo(`🔧 Parser mode: ${useTraditionalParser ? 'Traditional' : 'Gemini AI'}`);
@@ -991,37 +1473,63 @@
                 }
                 
                 try {
-                    // Show loading state
-                    const calendarPreview = document.getElementById('calendarPreview');
-                    calendarPreview.innerHTML = `
-                        <div class="d-flex align-items-center justify-content-center h-100">
-                            <div class="text-center">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <div class="mt-2">Applying all sheets to calendars...</div>
-                                <div class="mt-2 text-muted">This may take several minutes</div>
-                            </div>
-                        </div>
-                    `;
+                    // Show progress overlay
+                    showProgress();
+                    addProgressStep(`Starting bulk operation for ${sheets.length} sheets`, 'current');
                     
-                    logInfo('⏳ Showing loading state - operation in progress...');
+                    // Set up cancel button
+                    document.getElementById('cancelProgressBtn').onclick = () => {
+                        progressCancelled = true;
+                        hideProgress();
+                        logInfo('❌ User cancelled the operation');
+                    };
+                    
+                    // Initialize progress steps
+                    const progressDetails = document.getElementById('progressDetails');
+                    progressDetails.innerHTML = '';
+                    
+                    // Add a step for each sheet (pending)
+                    const sheetStepElements = {};
+                    sheets.forEach(sheet => {
+                        const stepDiv = document.createElement('div');
+                        stepDiv.className = 'progress-step pending';
+                        stepDiv.setAttribute('data-sheet', sheet);
+                        stepDiv.innerHTML = `
+                            <div class="progress-step-icon">⏳</div>
+                            <div class="progress-step-text">${sheet}: Pending</div>
+                        `;
+                        progressDetails.appendChild(stepDiv);
+                        sheetStepElements[sheet] = stepDiv;
+                    });
+                    
+                    // Add a finalizing step
+                    addProgressStep('Finalizing calendar updates', 'pending');
+                    
+                    // Show initial progress
+                    updateProgress(0, 'Initializing bulk operation...');
                     
                     // Update active tab and show loading state
                     logInfo('🔘 Updating UI button states...');
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
                         btn.classList.remove('active');
-                        if (btn.textContent === 'APPLY ALL') {
+                        if (btn.textContent === 'Generate All Calendars') {
                             btn.classList.add('active');
-                            // Show loading state on APPLY ALL button
-                            const originalText = btn.textContent;
                             btn.disabled = true;
-                            btn.setAttribute('data-original-text', originalText);
-                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
-                            logInfo('🔄 APPLY ALL button set to loading state');
+                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Processing...';
                         }
                     });
 
+                    // Mark the first sheet as processing (simulate real-time)
+                    if (sheets.length > 0) {
+                        const firstStep = sheetStepElements[sheets[0]];
+                        if (firstStep) {
+                            firstStep.className = 'progress-step current';
+                            firstStep.querySelector('.progress-step-icon').textContent = '🔄';
+                            firstStep.querySelector('.progress-step-text').textContent = `${sheets[0]}: Processing...`;
+                        }
+                    }
+                    updateProgress(5, 'Sending request to server...');
+                    
                     logInfo('📡 Sending bulk apply request to server...');
                     const response = await fetch('/apply_all_sheets', {
                         method: 'POST',
@@ -1034,107 +1542,112 @@
                         })
                     });
 
+                    if (progressCancelled) return;
+                    
+                    updateProgress(15, 'Processing server response...');
+                    
                     logInfo('📥 Response received from server');
                     const data = await response.json();
                     logDebug(`Server response: ${JSON.stringify(data)}`);
                     
                     // Display debug logs if available
                     if (data.debug_logs && data.debug_logs.length > 0) {
-                        logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
-                        data.debug_logs.forEach(log => {
-                            // Parse the log level from the server log entry
-                            const logLevel = parseLogLevel(log);
-                            const logMessage = extractLogMessage(log);
-                            
-                            // Display with appropriate level
-                            if (logLevel === 'ERROR') {
-                                logError(logMessage);
-                            } else if (logLevel === 'WARNING') {
-                                logWarning(logMessage);
-                            } else if (logLevel === 'INFO') {
-                                logInfo(logMessage);
-                            } else {
-                                logDebug(logMessage);
-                            }
-                        });
+                        renderServerLogs(data.debug_logs);
                     }
                     
+                    // Mark each sheet as done (success or error)
+                    let completedCount = 0;
+                    if (data.sheet_results) {
+                        for (const [sheetName, result] of Object.entries(data.sheet_results)) {
+                            const stepDiv = sheetStepElements[sheetName];
+                            if (stepDiv) {
+                                stepDiv.className = 'progress-step completed';
+                                stepDiv.querySelector('.progress-step-icon').textContent = result.success ? '✅' : '❌';
+                                stepDiv.querySelector('.progress-step-text').textContent = `${sheetName}: ${result.success ? 'Done' : 'Error'}`;
+                                completedCount++;
+                                updateProgress(Math.round((completedCount / sheets.length) * 80), `${sheetName} processed`);
+                            }
+                        }
+                    }
+                    // Mark finalizing step as current
+                    const finalizingStep = progressDetails.lastElementChild;
+                    if (finalizingStep) {
+                        finalizingStep.className = 'progress-step current';
+                        finalizingStep.querySelector('.progress-step-icon').textContent = '🔄';
+                        finalizingStep.querySelector('.progress-step-text').textContent = 'Finalizing calendar updates...';
+                    }
+                    updateProgress(90, 'Building results display...');
+                    
                     if (data.success) {
+                        if (finalizingStep) {
+                            finalizingStep.className = 'progress-step completed';
+                            finalizingStep.querySelector('.progress-step-icon').textContent = '✅';
+                            finalizingStep.querySelector('.progress-step-text').textContent = 'All calendars finalized!';
+                        }
+                        updateProgress(100, 'Operation completed successfully!');
+                        
                         logSuccess(`✅ Bulk operation completed successfully!`);
-                        logInfo(`📊 Processing summary:`);
-                        logInfo(`   - Total sheets: ${data.summary.total_sheets}`);
-                        logInfo(`   - Successful: ${data.summary.successful_sheets}`);
-                        logInfo(`   - Failed: ${data.summary.failed_sheets}`);
-                        logInfo(`   - Events created: ${data.summary.total_events_created}`);
-                        logInfo(`   - Events updated: ${data.summary.total_events_updated}`);
-                        logInfo(`   - Events deleted: ${data.summary.total_events_deleted}`);
+                        logInfo(`📊 Summary: ${data.total_events_created} events created, ${data.total_events_updated} updated, ${data.total_events_deleted} deleted`);
                         
-                        // Display results
-                        const summary = data.summary;
-                        const sheetResults = data.sheet_results;
-                        
+                        // Build results table
                         let resultsHtml = `
                             <div class="alert alert-success">
                                 <i class="bi bi-check-circle"></i>
-                                <strong>Bulk Operation Completed Successfully!</strong>
+                                <strong>Success!</strong> All calendars have been generated successfully.
                             </div>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="card">
-                                        <div class="card-header">
-                                            <h5 class="mb-0">Summary</h5>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Operation Summary</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <div class="text-center">
+                                                <div class="h4 text-success">${data.total_events_created}</div>
+                                                <small class="text-muted">Events Created</small>
+                                            </div>
                                         </div>
-                                        <div class="card-body">
-                                            <ul class="list-group list-group-flush">
-                                                <li class="list-group-item d-flex justify-content-between">
-                                                    <span>Total Sheets:</span>
-                                                    <span class="badge bg-primary">${summary.total_sheets}</span>
-                                                </li>
-                                                <li class="list-group-item d-flex justify-content-between">
-                                                    <span>Successful Sheets:</span>
-                                                    <span class="badge bg-success">${summary.successful_sheets}</span>
-                                                </li>
-                                                <li class="list-group-item d-flex justify-content-between">
-                                                    <span>Failed Sheets:</span>
-                                                    <span class="badge bg-danger">${summary.failed_sheets}</span>
-                                                </li>
-                                                <li class="list-group-item d-flex justify-content-between">
-                                                    <span>Events Created:</span>
-                                                    <span class="badge bg-info">${summary.total_events_created}</span>
-                                                </li>
-                                                <li class="list-group-item d-flex justify-content-between">
-                                                    <span>Events Updated:</span>
-                                                    <span class="badge bg-warning">${summary.total_events_updated}</span>
-                                                </li>
-                                                <li class="list-group-item d-flex justify-content-between">
-                                                    <span>Events Deleted:</span>
-                                                    <span class="badge bg-secondary">${summary.total_events_deleted}</span>
-                                                </li>
-                                            </ul>
+                                        <div class="col-md-3">
+                                            <div class="text-center">
+                                                <div class="h4 text-primary">${data.total_events_updated}</div>
+                                                <small class="text-muted">Events Updated</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="text-center">
+                                                <div class="h4 text-warning">${data.total_events_deleted}</div>
+                                                <small class="text-muted">Events Deleted</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="text-center">
+                                                <div class="h4 text-info">${Object.keys(data.sheet_results).length}</div>
+                                                <small class="text-muted">Calendars Updated</small>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="card">
-                                        <div class="card-header">
-                                            <h5 class="mb-0">Sheet Results</h5>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                                                <table class="table table-sm">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Sheet</th>
-                                                            <th>Status</th>
-                                                            <th>Created</th>
-                                                            <th>Updated</th>
-                                                            <th>Deleted</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
+                            </div>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Calendar Details</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Calendar</th>
+                                                    <th>Status</th>
+                                                    <th>Created</th>
+                                                    <th>Updated</th>
+                                                    <th>Deleted</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
                         `;
                         
-                        for (const [sheetName, result] of Object.entries(sheetResults)) {
+                        for (const [sheetName, result] of Object.entries(data.sheet_results)) {
                             const statusClass = result.success ? 'success' : 'danger';
                             const statusText = result.success ? 'Success' : 'Failed';
                             const created = result.events_created || 0;
@@ -1167,11 +1680,20 @@
                             </div>
                         `;
                         
+                        const calendarPreview = document.getElementById('calendarPreview');
                         calendarPreview.innerHTML = resultsHtml;
                         
+                        // Refresh the SLOHS calendars after successful completion
+                        logInfo('🔄 Refreshing SLOHS calendars after successful bulk operation...');
+                        await loadSLOHSCalendars();
+                        logSuccess('✅ SLOHS calendars refreshed successfully');
+                        
                     } else {
+                        setProgressError(`Operation failed: ${data.error}`);
                         logError(`❌ Bulk operation failed: ${data.error}`);
                         logError(`💥 Server returned error response`);
+                        
+                        const calendarPreview = document.getElementById('calendarPreview');
                         calendarPreview.innerHTML = `
                             <div class="alert alert-danger">
                                 <i class="bi bi-exclamation-triangle"></i>
@@ -1180,8 +1702,11 @@
                         `;
                     }
                 } catch (error) {
+                    setProgressError(`Network error: ${error.message}`);
                     logError(`💥 Exception in applyAllSheets: ${error}`);
                     logError(`🔍 Error details: ${error.message || error}`);
+                    
+                    const calendarPreview = document.getElementById('calendarPreview');
                     calendarPreview.innerHTML = `
                         <div class="alert alert-danger">
                             <i class="bi bi-exclamation-triangle"></i>
@@ -1189,17 +1714,19 @@
                         </div>
                     `;
                 } finally {
+                    // Wait a moment to show completion, then hide progress
+                    setTimeout(() => {
+                        hideProgress();
+                    }, 2000);
+                    
                     logInfo('🧹 Cleaning up bulk apply operation');
                     
                     // Restore button states
                     logInfo('🔘 Restoring button states...');
                     Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        if (btn.hasAttribute('data-original-text')) {
-                            const originalText = btn.getAttribute('data-original-text');
+                        if (btn.textContent.includes('Processing...')) {
                             btn.disabled = false;
-                            btn.innerHTML = originalText;
-                            btn.removeAttribute('data-original-text');
-                            logInfo('✅ APPLY ALL button restored to normal state');
+                            btn.innerHTML = 'Generate All Calendars';
                         }
                     });
                     logInfo('✅ Bulk apply operation cleanup completed');
@@ -1359,6 +1886,7 @@
                 }
                 
                 previewChangesBtn.disabled = false;
+                document.getElementById('loadCurrentCalendarBtn').disabled = false;
             }
 
             previewChangesBtn.addEventListener('click', async function() {
@@ -1374,9 +1902,123 @@
                     const activeTab = sheetTabs.querySelector('.active');
                     const sheetName = activeTab ? activeTab.textContent : null;
                     
-                    if (!sheetName || sheetName === 'ALL') {
+                    if (!sheetName) {
                         alert('Please select a specific sheet to preview changes');
                         return;
+                    }
+
+                    if (sheetName === 'All Sports') {
+                        // Special case: preview all sheets combined
+                        const response = await fetch('/preview_all_sheets', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                spreadsheet_id: spreadsheetId,
+                                use_traditional_parser: useTraditionalParser
+                            })
+                        });
+
+                        const data = await response.json();
+                        
+                        // Display debug logs if available
+                        if (data.debug_logs && data.debug_logs.length > 0) {
+                            renderServerLogs(data.debug_logs);
+                        }
+                        
+                        if (data.success) {
+                            // Display combined preview for all sheets
+                            const allEvents = data.events || [];
+                            
+                            if (allEvents.length === 0) {
+                                changesPreview.innerHTML = `
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle"></i>
+                                        No events found in any sheets.
+                                    </div>
+                                `;
+                            } else {
+                                changesPreview.innerHTML = `
+                                    <div class="alert alert-info">
+                                        <i class="bi bi-info-circle"></i>
+                                        Preview of ${allEvents.length} events from all sheets to be added to the <b>All Sports</b> calendar
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h5>All Sports Preview</h5>
+                                            <div class="list-group">
+                                                ${allEvents.map(event => `
+                                                    <div class="card event-card create-event">
+                                                        <div class="card-body">
+                                                            <h6 class="card-title">
+                                                                <i class="bi bi-plus-circle"></i>
+                                                                Create Event
+                                                            </h6>
+                                                            <p class="card-text">
+                                                                <strong>${event.summary}</strong><br>
+                                                                Date: ${formatDateTime(event.start.dateTime || event.start.date)}<br>
+                                                                Time: ${event.start.dateTime ? formatTime(event.start.dateTime) : 'All Day'}<br>
+                                                                Location: ${event.location || 'N/A'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h5>Calendar Preview</h5>
+                                            <div class="alert alert-info">
+                                                <i class="bi bi-info-circle"></i>
+                                                After applying changes, you can view your calendar at:
+                                                <br><a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
+                                            </div>
+                                            <div class="card">
+                                                <div class="card-body">
+                                                    <h6 class="card-title">Events to be added:</h6>
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Date</th>
+                                                                    <th>Event</th>
+                                                                    <th>Location</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                ${allEvents.map(event => {
+                                                                    let eventDate;
+                                                                    if (event.start.dateTime) {
+                                                                        eventDate = new Date(event.start.dateTime);
+                                                                    } else if (event.start.date) {
+                                                                        // Parse all-day event date correctly
+                                                                        eventDate = new Date(event.start.date + 'T00:00:00');
+                                                                    }
+                                                                    return `
+                                                                        <tr>
+                                                                            <td>${eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                                                                            <td>${event.summary}</td>
+                                                                            <td>${event.location || 'N/A'}</td>
+                                                                        </tr>
+                                                                    `;
+                                                                }).join('')}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                            // Enable apply button after successful preview
+                            applyChangesBtn.disabled = false;
+                            return;
+                        } else {
+                            alert('Error previewing All Sports changes: ' + data.error);
+                            applyChangesBtn.disabled = true;
+                            return;
+                        }
                     }
 
                     const response = await fetch('/preview_changes', {
@@ -1395,23 +2037,7 @@
                     
                     // Display debug logs if available
                     if (data.debug_logs && data.debug_logs.length > 0) {
-                        logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
-                        data.debug_logs.forEach(log => {
-                            // Parse the log level from the server log entry
-                            const logLevel = parseLogLevel(log);
-                            const logMessage = extractLogMessage(log);
-                            
-                            // Display with appropriate level
-                            if (logLevel === 'ERROR') {
-                                logError(logMessage);
-                            } else if (logLevel === 'WARNING') {
-                                logWarning(logMessage);
-                            } else if (logLevel === 'INFO') {
-                                logInfo(logMessage);
-                            } else {
-                                logDebug(logMessage);
-                            }
-                        });
+                        renderServerLogs(data.debug_logs);
                     }
                     
                     if (data.success) {
@@ -1559,11 +2185,123 @@
                 }
             });
 
+            // Load Current Calendar button event listener
+            document.getElementById('loadCurrentCalendarBtn').addEventListener('click', async function() {
+                try {
+                    // Disable button while loading
+                    this.disabled = true;
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading...';
+
+                    // Get the currently active sheet
+                    const activeTab = sheetTabs.querySelector('.active');
+                    const sheetName = activeTab ? activeTab.textContent : null;
+                    
+                    if (!sheetName || sheetName === 'All Sports') {
+                        alert('Please select a specific sheet to load current calendar');
+                        return;
+                    }
+
+                    logInfo(`Loading current calendar for sheet: ${sheetName}`);
+
+                    const response = await fetch('/get_current_calendar', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            sheet_name: sheetName
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        logSuccess(`Loaded current calendar: ${data.total_events} events found`);
+                        
+                        // Display current calendar events
+                        const calendarPreview = document.getElementById('calendarPreview');
+                        
+                        if (data.events.length === 0) {
+                            calendarPreview.innerHTML = `
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    <strong>Current Calendar: ${data.calendar_name}</strong><br>
+                                    No events found in the current calendar.
+                                </div>
+                            `;
+                        } else {
+                            // Sort events by date
+                            const sortedEvents = data.events.sort((a, b) => {
+                                const dateA = new Date(a.formatted_date.split(' (')[0]);
+                                const dateB = new Date(b.formatted_date.split(' (')[0]);
+                                return dateA - dateB;
+                            });
+
+                            calendarPreview.innerHTML = `
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle"></i>
+                                    <strong>Current Calendar: ${data.calendar_name}</strong><br>
+                                    Found ${data.total_events} events in the current calendar.
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Event</th>
+                                                <th>Location</th>
+                                                <th>Transportation</th>
+                                                <th>Release Time</th>
+                                                <th>Departure Time</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${sortedEvents.map(event => `
+                                                <tr>
+                                                    <td>${event.formatted_date}</td>
+                                                    <td><strong>${event.summary}</strong></td>
+                                                    <td>${event.location}</td>
+                                                    <td>${event.transportation}</td>
+                                                    <td>${event.release_time}</td>
+                                                    <td>${event.departure_time}</td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        logError(`Error loading current calendar: ${data.error}`);
+                        calendarPreview.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>Error loading current calendar:</strong> ${data.error}
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    logError(`Network error loading current calendar: ${error}`);
+                    calendarPreview.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Network error:</strong> ${error.message || error}
+                        </div>
+                    `;
+                } finally {
+                    // Re-enable button
+                    this.disabled = false;
+                    this.innerHTML = '<i class="bi bi-calendar-check"></i> Load Current Calendar';
+                }
+            });
+
             applyChangesBtn.addEventListener('click', async function() {
+                logInfo('Apply Changes button clicked');
                 try {
                     // Disable both buttons while applying changes
                     previewChangesBtn.disabled = true;
                     applyChangesBtn.disabled = true;
+                    logDebug('Buttons disabled');
 
                     // Show loading state
                     calendarPreview.innerHTML = `
@@ -1579,16 +2317,65 @@
 
                     const spreadsheetId = document.getElementById('spreadsheetId').value;
                     const useTraditionalParser = true; // Always use traditional parser
+                    logDebug(`Spreadsheet ID: ${spreadsheetId}, Traditional Parser: ${useTraditionalParser}`);
                     
                     // Get the currently active sheet
                     const activeTab = sheetTabs.querySelector('.active');
                     const sheetName = activeTab ? activeTab.textContent : null;
+                    logDebug(`Active sheet: ${sheetName}`);
                     
-                    if (!sheetName || sheetName === 'ALL') {
+                    if (!sheetName) {
+                        logError('No active sheet selected');
                         alert('Please select a specific sheet to apply changes');
                         return;
                     }
 
+                    if (sheetName === 'All Sports') {
+                        logInfo('Applying to All Sports master calendar');
+                        // Special case: apply all to master calendar
+                        const response = await fetch('/apply_all_to_master_calendar', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                spreadsheet_id: spreadsheetId,
+                                use_traditional_parser: useTraditionalParser
+                            })
+                        });
+                        const data = await response.json();
+                        logDebug(`All Sports response: ${JSON.stringify(data)}`);
+                        if (data.success) {
+                            calendarPreview.innerHTML = `
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle"></i>
+                                    Successfully applied ${data.total_events} events to the <b>All Sports</b> calendar!
+                                </div>
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    View your updated calendar at: 
+                                    <a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
+                                </div>
+                            `;
+                            
+                            // Refresh the SLOHS calendars after successful All Sports operation
+                            logInfo('🔄 Refreshing SLOHS calendars after successful All Sports operation...');
+                            await loadSLOHSCalendars();
+                            logSuccess('✅ SLOHS calendars refreshed successfully');
+                            
+                        } else {
+                            calendarPreview.innerHTML = `
+                                <div class="alert alert-danger">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    <strong>Error applying All Sports calendar:</strong> ${data.error}
+                                </div>
+                            `;
+                        }
+                        return;
+                    }
+
+                    // Default: apply changes to single sheet
+                    logInfo(`Making request to /apply_changes for sheet: ${sheetName}`);
                     const response = await fetch('/apply_changes', {
                         method: 'POST',
                         headers: {
@@ -1600,9 +2387,12 @@
                             use_traditional_parser: useTraditionalParser
                         })
                     });
+                    logDebug(`Response received from /apply_changes`);
 
                     const data = await response.json();
+                    logDebug(`Response data: ${JSON.stringify(data)}`);
                     if (data.success) {
+                        logSuccess(`Successfully applied ${data.events.length} events to calendar`);
                         // Display success message and calendar link
                         calendarPreview.innerHTML = `
                             <div class="alert alert-success">
@@ -1616,58 +2406,41 @@
                             </div>
                             <div class="mt-3">
                                 <div class="table-responsive">
-                                    <table class="table">
+                                    <table class="table table-sm">
                                         <thead>
                                             <tr>
-                                                <th>Event</th>
                                                 <th>Date</th>
-                                                <th>Time</th>
+                                                <th>Event</th>
                                                 <th>Location</th>
+                                                <th>Transportation</th>
+                                                <th>Release Time</th>
+                                                <th>Departure Time</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            ${data.events.map(event => {
-                                                // The backend sends formatted events with these fields
-                                                const summary = event?.summary || 'Untitled Event';
-                                                const location = event?.location || 'N/A';
-                                                const formattedDate = event?.formatted_date || 'N/A';
-                                                
-                                                return `
-                                                    <tr>
-                                                        <td>${summary}</td>
-                                                        <td>${formattedDate}</td>
-                                                        <td>${formattedDate.includes('All Day') ? 'All Day' : 'N/A'}</td>
-                                                        <td>${location}</td>
-                                                    </tr>
-                                                `;
-                                            }).join('')}
+                                            ${data.events.map(event => `
+                                                <tr>
+                                                    <td>${event.formatted_date}</td>
+                                                    <td><strong>${event.summary}</strong></td>
+                                                    <td>${event.location}</td>
+                                                    <td>${event.transportation}</td>
+                                                    <td>${event.release_time}</td>
+                                                    <td>${event.departure_time}</td>
+                                                </tr>
+                                            `).join('')}
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
                         `;
                         
-                        // Display debug logs if available
-                        if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
-                            data.debug_logs.forEach(log => {
-                                // Parse the log level from the server log entry
-                                const logLevel = parseLogLevel(log);
-                                const logMessage = extractLogMessage(log);
-                                
-                                // Display with appropriate level
-                                if (logLevel === 'ERROR') {
-                                    logError(logMessage);
-                                } else if (logLevel === 'WARNING') {
-                                    logWarning(logMessage);
-                                } else if (logLevel === 'INFO') {
-                                    logInfo(logMessage);
-                                } else {
-                                    logDebug(logMessage);
-                                }
-                            });
-                        }
+                        // Refresh the SLOHS calendars after successful individual sheet operation
+                        logInfo('🔄 Refreshing SLOHS calendars after successful sheet operation...');
+                        await loadSLOHSCalendars();
+                        logSuccess('✅ SLOHS calendars refreshed successfully');
+                        
                     } else {
+                        logError(`Error applying changes: ${data.error}`);
                         calendarPreview.innerHTML = `
                             <div class="d-flex align-items-center justify-content-center h-100">
                                 <p class="text-danger">Error applying changes: ${data.error}</p>
@@ -1676,32 +2449,16 @@
                         
                         // Display debug logs if available (even on error)
                         if (data.debug_logs && data.debug_logs.length > 0) {
-                            logInfo(`📋 Server logs (${data.debug_logs.length} entries):`);
-                            data.debug_logs.forEach(log => {
-                                // Parse the log level from the server log entry
-                                const logLevel = parseLogLevel(log);
-                                const logMessage = extractLogMessage(log);
-                                
-                                // Display with appropriate level
-                                if (logLevel === 'ERROR') {
-                                    logError(logMessage);
-                                } else if (logLevel === 'WARNING') {
-                                    logWarning(logMessage);
-                                } else if (logLevel === 'INFO') {
-                                    logInfo(logMessage);
-                                } else {
-                                    logDebug(logMessage);
-                                }
-                            });
+                            renderServerLogs(data.debug_logs);
                         }
                     }
                 } catch (error) {
+                    logError(`Exception in apply changes: ${error.message || error}`);
                     calendarPreview.innerHTML = `
                         <div class="d-flex align-items-center justify-content-center h-100">
                             <p class="text-danger">Error applying changes: ${error.message || error}</p>
                         </div>
                     `;
-                } finally {
                     // Re-enable preview button
                     previewChangesBtn.disabled = false;
                     // Keep apply button disabled until preview is run again
@@ -1713,6 +2470,93 @@
                 const el = document.getElementById('currentSheetName');
                 if (el) el.textContent = name ? `Sport: ${name}` : '';
             }
+
+            // Load SLOHS calendars when page loads
+            async function loadSLOHSCalendars() {
+                try {
+                    const response = await fetch('/get_slohs_calendars');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        displaySLOHSCalendars(data.calendars);
+                    } else {
+                        console.error('Error loading SLOHS calendars:', data.error);
+                    }
+                } catch (error) {
+                    console.error('Network error loading SLOHS calendars:', error);
+                }
+            }
+
+            function displaySLOHSCalendars(calendars) {
+                const calendarIndex = document.getElementById('calendarIndex');
+                if (!calendarIndex) return;
+
+                if (calendars.length === 0) {
+                    calendarIndex.innerHTML = `
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            No SLOHS calendars found. Create some calendars first!
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Sort calendars by name
+                calendars.sort((a, b) => a.name.localeCompare(b.name));
+
+                const calendarLinks = calendars.map(calendar => {
+                    const displayName = calendar.name.replace('SLOHS ', '');
+                    
+                    return `
+                        <div class="mb-2">
+                            <a href="https://calendar.google.com/calendar/embed?src=${encodeURIComponent(calendar.id)}" 
+                               target="_blank" 
+                               class="text-decoration-none">
+                                <i class="bi bi-calendar-event text-primary"></i>
+                                <strong>${displayName}</strong>
+                            </a>
+                        </div>
+                    `;
+                }).join('');
+
+                calendarIndex.innerHTML = `
+                    <div class="border rounded p-3 bg-light">
+                        <h6 class="mb-3">Subscribe to SLOHS Calendars:</h6>
+                        ${calendarLinks}
+                    </div>
+                `;
+            }
+
+            // Add filtering logic for debug log
+            const logLevelFilter = document.getElementById('logLevelFilter');
+
+            function filterLogEntries() {
+                const selectedLevel = logLevelFilter.value;
+                const entries = debugLog.querySelectorAll('.log-entry');
+                entries.forEach(entry => {
+                    const levelSpan = entry.querySelector('.log-level');
+                    if (!levelSpan) return;
+                    const entryLevel = levelSpan.textContent.trim().toUpperCase();
+                    if (selectedLevel === 'ALL' || entryLevel === selectedLevel) {
+                        entry.style.display = '';
+                    } else {
+                        entry.style.display = 'none';
+                    }
+                });
+            }
+
+            logLevelFilter.addEventListener('change', filterLogEntries);
+
+            // Patch log() to call filterLogEntries after adding a new entry
+            const originalLogWithJSON = logWithJSON;
+            logWithJSON = function(level, message) {
+                originalLogWithJSON(level, message);
+                filterLogEntries();
+            };
+
+            // On page load, filter to ALL
+            filterLogEntries();
+
         });
     </script>
 </body>

@@ -206,14 +206,21 @@ def parse_date(date_str):
         end_date = datetime(year, month, end_day).date()
         logger.debug(f"Parsed shorthand date range: {start_date} to {end_date}")
         return start_date, end_date
-    # Handle normal MM/DD/YYYY
+    # Handle normal MM/DD/YYYY or MM/DD/YY
     try:
+        # First try MM/DD/YYYY format
         d = datetime.strptime(date_str, "%m/%d/%Y").date()
         logger.debug(f"Parsed single date: {d}")
         return d, None
-    except Exception as e:
-        logger.debug(f"Failed to parse date '{date_str}': {str(e)}")
-        raise ValueError(f"Invalid date format: {date_str}")
+    except ValueError:
+        try:
+            # Try MM/DD/YY format (2-digit year)
+            d = datetime.strptime(date_str, "%m/%d/%y").date()
+            logger.debug(f"Parsed single date (2-digit year): {d}")
+            return d, None
+        except Exception as e:
+            logger.debug(f"Failed to parse date '{date_str}': {str(e)}")
+            raise ValueError(f"Invalid date format: {date_str}")
 
 def parse_time(time_str):
     """Parse time string and return a datetime.time object or None for all-day events."""
@@ -516,6 +523,11 @@ def parse_sports_events(data, sheet_name=None):
             continue
     
     logger.info(f"Successfully parsed {len(events)} events from {len(data[data_start_row:])} rows")
+    
+    # Log details about each event for debugging
+    for i, event in enumerate(events):
+        logger.debug(f"Event {i+1}: {event.get('summary', 'No summary')} at {event.get('location', 'No location')}")
+    
     return events
 
 def list_available_sheets(service, spreadsheet_id):
@@ -653,8 +665,8 @@ def main():
             events = parse_sports_events(data, sheet_name)
             
             if events:
-                # Get sport name from first event
-                sport_name = events[0]['summary']
+                # Use sheet name as sport name instead of extracting from event summary
+                sport_name = sheet_name
                 sport_event_counts[sport_name] = len(events)
                 total_events += len(events)
                 

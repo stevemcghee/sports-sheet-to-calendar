@@ -1,9 +1,13 @@
 import json
 import os
+import logging
 from dotenv import load_dotenv
 import google.generativeai as genai
 import re
 import datetime
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -152,7 +156,7 @@ def parse_sheet_with_gemini(values, model=None):
         
         # Get the response text
         response_text = response.text if hasattr(response, 'text') else str(response)
-        print(f"Raw Gemini response: {response_text}")  # Debug logging
+        logger.debug(f"Raw Gemini response: {response_text}")  # Debug logging
         
         # Try to find JSON content in the response
         try:
@@ -164,7 +168,7 @@ def parse_sheet_with_gemini(values, model=None):
             else:
                 json_str = response_text.strip()
             
-            print(f"Extracted JSON string: {json_str}")  # Debug logging
+            logger.debug(f"Extracted JSON string: {json_str}")  # Debug logging
             
             # Clean up the JSON string
             json_str = json_str.replace('\n', ' ').replace('\r', '')
@@ -173,7 +177,7 @@ def parse_sheet_with_gemini(values, model=None):
             try:
                 result = json.loads(json_str)
             except json.JSONDecodeError as e:
-                print(f"Initial JSON parse failed: {e}")  # Debug logging
+                logger.debug(f"Initial JSON parse failed: {e}")  # Debug logging
                 # If parsing fails, try to fix common issues
                 json_str = json_str.replace('\\"', '"')  # Fix escaped quotes
                 json_str = json_str.replace('\\n', ' ')  # Replace newlines with spaces
@@ -182,23 +186,23 @@ def parse_sheet_with_gemini(values, model=None):
                 json_str = re.sub(r'(?<!\\)"', r'\"', json_str)  # Escape unescaped quotes
                 json_str = re.sub(r'\\{2,}', r'\\', json_str)  # Fix multiple backslashes
                 
-                print(f"Cleaned JSON string: {json_str}")  # Debug logging
+                logger.debug(f"Cleaned JSON string: {json_str}")  # Debug logging
                 
                 # Try parsing again
                 result = json.loads(json_str)
             
             # Validate the result structure
             if not isinstance(result, dict):
-                print(f"Result is not a dictionary: {result}")
+                logger.warning(f"Result is not a dictionary: {result}")
                 return []
                 
             if 'events' not in result:
-                print(f"No 'events' key in result: {result}")
+                logger.warning(f"No 'events' key in result: {result}")
                 return []
                 
             events = result.get('events', [])
             if not isinstance(events, list):
-                print(f"Events is not a list: {events}")
+                logger.warning(f"Events is not a list: {events}")
                 return []
                 
             # Validate and clean each event
@@ -207,7 +211,7 @@ def parse_sheet_with_gemini(values, model=None):
                 try:
                     # Ensure required fields are present
                     if not all(key in event for key in ['summary', 'start', 'end', 'location', 'description']):
-                        print(f"Missing required fields in event: {event}")
+                        logger.warning(f"Missing required fields in event: {event}")
                         continue
                         
                     # Determine if this is an all-day event or timed event
@@ -215,7 +219,7 @@ def parse_sheet_with_gemini(values, model=None):
                     is_timed = 'dateTime' in event['start'] and 'dateTime' in event['end']
                     
                     if not (is_all_day or is_timed):
-                        print(f"Event must have either date (all-day) or dateTime (timed) format: {event}")
+                        logger.warning(f"Event must have either date (all-day) or dateTime (timed) format: {event}")
                         continue
                     
                     if is_all_day:
@@ -237,7 +241,7 @@ def parse_sheet_with_gemini(values, model=None):
                             datetime.datetime.strptime(cleaned_event['start']['date'], '%Y-%m-%d')
                             datetime.datetime.strptime(cleaned_event['end']['date'], '%Y-%m-%d')
                         except ValueError:
-                            print(f"Invalid date format in all-day event: {cleaned_event}")
+                            logger.warning(f"Invalid date format in all-day event: {cleaned_event}")
                             continue
                     else:
                         # Timed event
@@ -260,33 +264,33 @@ def parse_sheet_with_gemini(values, model=None):
                             datetime.datetime.fromisoformat(cleaned_event['start']['dateTime'].replace('Z', '+00:00'))
                             datetime.datetime.fromisoformat(cleaned_event['end']['dateTime'].replace('Z', '+00:00'))
                         except ValueError:
-                            print(f"Invalid datetime format in timed event: {cleaned_event}")
+                            logger.warning(f"Invalid datetime format in timed event: {cleaned_event}")
                             continue
 
                     # Validate recurrence rule if present
                     if 'recurrence' in event:
                         if not isinstance(event['recurrence'], list):
-                            print(f"Invalid recurrence format in event: {event}")
+                            logger.warning(f"Invalid recurrence format in event: {event}")
                             continue
                         for rule in event['recurrence']:
                             if not rule.startswith('RRULE:'):
-                                print(f"Invalid recurrence rule format: {rule}")
+                                logger.warning(f"Invalid recurrence rule format: {rule}")
                                 continue
                         cleaned_event['recurrence'] = event['recurrence']
                         
                     cleaned_events.append(cleaned_event)
                 except Exception as e:
-                    print(f"Error cleaning event: {e}")
+                    logger.error(f"Error cleaning event: {e}")
                     continue
                     
-            print(f"Successfully parsed {len(cleaned_events)} events")  # Debug logging
+            logger.info(f"Successfully parsed {len(cleaned_events)} events")  # Debug logging
             return cleaned_events
             
         except json.JSONDecodeError as e:
-            print(f"Error parsing JSON from Gemini response: {e}")
-            print(f"Response text: {response_text}")
+            logger.error(f"Error parsing JSON from Gemini response: {e}")
+            logger.error(f"Response text: {response_text}")
             return []
             
     except Exception as e:
-        print(f"Error parsing with Gemini: {e}")
+        logger.error(f"Error parsing with Gemini: {e}")
         return [] 
