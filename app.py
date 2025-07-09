@@ -601,8 +601,17 @@ def preview_changes():
                 events = parse_sports_events(values, sheet_name)
 
         # Get existing events
-        calendar_id = create_or_get_sports_calendar(calendar_service, sheet_name)
+        # Handle special case for "All Sports"
+        if sheet_name == 'All Sports':
+            calendar_name = 'SLOHS All Sports'
+        else:
+            calendar_name = f"SLOHS {sheet_name}"
+        calendar_id = create_or_get_sports_calendar(calendar_service, calendar_name)
         existing_events = get_existing_events(calendar_service, calendar_id)
+
+        # Convert existing events to list if it's a dictionary
+        if isinstance(existing_events, dict):
+            existing_events = list(existing_events.values())
 
         # Compare events
         changes = {
@@ -617,11 +626,8 @@ def preview_changes():
             for existing in existing_events:
                 if events_are_equal(event, existing):
                     found = True
-                    if not events_are_equal(event, existing, compare_all=True):
-                        changes['to_update'].append({
-                            'old': existing,
-                            'new': event
-                        })
+                    # Note: events_are_equal already does a full comparison
+                    # so we don't need a separate compare_all parameter
                     break
             if not found:
                 changes['to_add'].append(event)
@@ -687,7 +693,12 @@ def apply_changes():
         logger.info(f"Sheet name: {sheet_name}")
         logger.info(f"Use traditional parser: {use_traditional_parser}")
         service = get_calendar_service()
-        calendar_name = f"SLOHS {sheet_name}"
+        
+        # Handle special case for "All Sports"
+        if sheet_name == 'All Sports':
+            calendar_name = 'SLOHS All Sports'
+        else:
+            calendar_name = f"SLOHS {sheet_name}"
         logger.info(f"Using calendar name: {calendar_name}")
         
         calendar_id = create_or_get_sports_calendar(service, calendar_name)
@@ -1239,7 +1250,12 @@ def get_current_calendar():
             return jsonify({'success': False, 'error': 'Sheet name is required'})
 
         service = get_calendar_service()
-        calendar_name = f"SLOHS {sheet_name}"
+        
+        # Handle special case for "All Sports"
+        if sheet_name == 'All Sports':
+            calendar_name = 'SLOHS All Sports'
+        else:
+            calendar_name = f"SLOHS {sheet_name}"
         
         # Try to get existing calendar
         try:

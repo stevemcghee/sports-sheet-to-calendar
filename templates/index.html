@@ -2196,7 +2196,7 @@
                     const activeTab = sheetTabs.querySelector('.active');
                     const sheetName = activeTab ? activeTab.textContent : null;
                     
-                    if (!sheetName || sheetName === 'All Sports') {
+                    if (!sheetName) {
                         alert('Please select a specific sheet to load current calendar');
                         return;
                     }
