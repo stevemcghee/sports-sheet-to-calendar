@@ -390,6 +390,15 @@ def parse_sports_events(data, sheet_name=None):
     location_idx = None
     time_idx = None
     
+    # Additional column detection for unused columns
+    transportation_idx = None
+    release_idx = None
+    departure_idx = None
+    attire_idx = None
+    notes_idx = None
+    bus_idx = None
+    vans_idx = None
+    
     for i, header in enumerate(headers):
         header_lower = str(header).lower().strip()
         if 'date' in header_lower:
@@ -404,8 +413,23 @@ def parse_sports_events(data, sheet_name=None):
                 time_idx = i
             elif time_idx is None:  # Only set if no start time found yet
                 time_idx = i
+        elif 'transportation' in header_lower or 'transport' in header_lower:
+            transportation_idx = i
+        elif 'release' in header_lower:
+            release_idx = i
+        elif 'departure' in header_lower or 'depart' in header_lower:
+            departure_idx = i
+        elif 'attire' in header_lower or 'uniform' in header_lower:
+            attire_idx = i
+        elif 'notes' in header_lower or 'note' in header_lower:
+            notes_idx = i
+        elif 'bus' in header_lower:
+            bus_idx = i
+        elif 'vans' in header_lower or 'van' in header_lower:
+            vans_idx = i
     
     logger.debug(f"Column indices - Date: {date_idx}, Event: {event_idx}, Location: {location_idx}, Time: {time_idx}")
+    logger.debug(f"Additional columns - Transportation: {transportation_idx}, Release: {release_idx}, Departure: {departure_idx}, Attire: {attire_idx}, Notes: {notes_idx}, Bus: {bus_idx}, Vans: {vans_idx}")
     
     if date_idx is None or event_idx is None or location_idx is None:
         logger.error(f"Missing required columns. Found headers: {headers}")
@@ -434,7 +458,17 @@ def parse_sports_events(data, sheet_name=None):
             location = row[location_idx]
             time_str = row[time_idx] if time_idx is not None and len(row) > time_idx else ""
             
+            # Extract additional fields
+            transportation = row[transportation_idx] if transportation_idx is not None and len(row) > transportation_idx else ""
+            release_time = row[release_idx] if release_idx is not None and len(row) > release_idx else ""
+            departure_time = row[departure_idx] if departure_idx is not None and len(row) > departure_idx else ""
+            attire = row[attire_idx] if attire_idx is not None and len(row) > attire_idx else ""
+            notes = row[notes_idx] if notes_idx is not None and len(row) > notes_idx else ""
+            bus = row[bus_idx] if bus_idx is not None and len(row) > bus_idx else ""
+            vans = row[vans_idx] if vans_idx is not None and len(row) > vans_idx else ""
+            
             logger.debug(f"Row {i+data_start_row+1}: Date='{date_str}', Event='{event}', Location='{location}', Time='{time_str}'")
+            logger.debug(f"Additional fields: Transportation='{transportation}', Release='{release_time}', Departure='{departure_time}', Attire='{attire}', Notes='{notes}', Bus='{bus}', Vans='{vans}'")
             
             if not date_str or not event or not location:
                 logger.debug(f"Row {i+data_start_row+1} missing required data - skipping")
@@ -470,10 +504,29 @@ def parse_sports_events(data, sheet_name=None):
                     # Single-day event
                     end_date_for_calendar = start_date + timedelta(days=1)  # Google Calendar end date is exclusive
                 
-                # Include time information in description if available
-                description = f"Location: {location}"
+                # Build description with all available information
+                description_parts = [f"Location: {location}"]
+                
                 if parsed_time:
-                    description += f"\nTime: {time_str}"
+                    description_parts.append(f"Time: {time_str}")
+                
+                # Add additional fields to description if they have values
+                if transportation and transportation.strip():
+                    description_parts.append(f"Transportation: {transportation}")
+                if release_time and release_time.strip():
+                    description_parts.append(f"Release Time: {release_time}")
+                if departure_time and departure_time.strip():
+                    description_parts.append(f"Departure Time: {departure_time}")
+                if attire and attire.strip():
+                    description_parts.append(f"Attire: {attire}")
+                if notes and notes.strip():
+                    description_parts.append(f"Notes: {notes}")
+                if bus and bus.strip():
+                    description_parts.append(f"Bus: {bus}")
+                if vans and vans.strip():
+                    description_parts.append(f"Vans: {vans}")
+                
+                description = "\n".join(description_parts)
                 
                 event_dict = {
                     "summary": f"{sport_name} - {event} at {location}",
@@ -486,6 +539,22 @@ def parse_sports_events(data, sheet_name=None):
                         "date": end_date_for_calendar.strftime("%Y-%m-%d")
                     }
                 }
+                
+                # Add custom fields for additional data (these will be stored in the event but may not display in all calendar views)
+                if transportation and transportation.strip():
+                    event_dict["transportation"] = transportation
+                if release_time and release_time.strip():
+                    event_dict["release_time"] = release_time
+                if departure_time and departure_time.strip():
+                    event_dict["departure_time"] = departure_time
+                if attire and attire.strip():
+                    event_dict["attire"] = attire
+                if notes and notes.strip():
+                    event_dict["notes"] = notes
+                if bus and bus.strip():
+                    event_dict["bus"] = bus
+                if vans and vans.strip():
+                    event_dict["vans"] = vans
                 events.append(event_dict)
                 logger.debug(f"Successfully created event: {event_dict['summary']}")
             except Exception as e:

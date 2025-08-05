@@ -90,10 +90,17 @@ def parse_sheet_with_gemini(values):
         The first row contains the sport name, the second row contains headers, and subsequent rows contain event data.
         
         Required columns:
-        - Start Datetime (required)
-        - Event (required)
+        - Date (required)
+        - Event/Opponent (required)
         - Location (required)
-        - End Datetime (optional)
+        - Time (optional)
+        - Transportation (optional)
+        - Release Time (optional)
+        - Departure Time (optional)
+        - Attire (optional)
+        - Notes (optional)
+        - Bus (optional)
+        - Vans (optional)
         
         Format each event as:
         {{
@@ -107,18 +114,27 @@ def parse_sheet_with_gemini(values):
                 "timeZone": "America/Los_Angeles"
             }},
             "location": "location",
-            "description": "Location: location"
+            "description": "Location: location\\nTime: time\\nTransportation: transportation\\nRelease Time: release_time\\nDeparture Time: departure_time\\nAttire: attire\\nNotes: notes\\nBus: bus\\nVans: vans",
+            "transportation": "transportation value if available",
+            "release_time": "release time value if available",
+            "departure_time": "departure time value if available",
+            "attire": "attire value if available",
+            "notes": "notes value if available",
+            "bus": "bus value if available",
+            "vans": "vans value if available"
         }}
         
         Rules:
         1. First row is the sport name
         2. Second row contains headers
-        3. Required columns must be present
-        4. If end datetime is missing, set it to 2 hours after start
-        5. Skip rows with missing required fields
-        6. Use timezone America/Los_Angeles
-        7. Convert dates to ISO 8601 format
-        8. Skip invalid events but continue processing others
+        3. Required columns (Date, Event/Opponent, Location) must be present
+        4. If time is missing, create an all-day event using date format
+        5. If time is provided, create a timed event with 2-hour duration
+        6. Skip rows with missing required fields
+        7. Use timezone America/Los_Angeles
+        8. Convert dates to ISO 8601 format
+        9. Include all available optional fields in description and as custom fields
+        10. Skip invalid events but continue processing others
         
         Here's the spreadsheet data:
         {json.dumps(values)}

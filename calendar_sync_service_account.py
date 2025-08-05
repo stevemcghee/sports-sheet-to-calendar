@@ -116,18 +116,41 @@ def parse_sports_events(sheet_data, sheet_name):
     location_col = None
     time_col = None
     
+    # Additional column detection for unused columns
+    transportation_col = None
+    release_col = None
+    departure_col = None
+    attire_col = None
+    notes_col = None
+    bus_col = None
+    vans_col = None
+    
     for i, header in enumerate(headers):
         header_lower = header.lower()
         if 'date' in header_lower:
             date_col = i
         elif 'sport' in header_lower:
             sport_col = i
-        elif 'event' in header_lower:
+        elif 'event' in header_lower or 'opponent' in header_lower:
             event_col = i
         elif 'location' in header_lower:
             location_col = i
         elif 'time' in header_lower:
             time_col = i
+        elif 'transportation' in header_lower or 'transport' in header_lower or 'bus/vans' in header_lower:
+            transportation_col = i
+        elif 'release' in header_lower:
+            release_col = i
+        elif 'departure' in header_lower or 'depart' in header_lower:
+            departure_col = i
+        elif 'attire' in header_lower or 'uniform' in header_lower:
+            attire_col = i
+        elif 'notes' in header_lower or 'note' in header_lower:
+            notes_col = i
+        elif 'bus' in header_lower and 'vans' not in header_lower:
+            bus_col = i
+        elif 'vans' in header_lower or 'van' in header_lower:
+            vans_col = i
     
     if date_col is None:
         logger.warning(f"No date column found in sheet: {sheet_name}")
@@ -151,10 +174,43 @@ def parse_sports_events(sheet_data, sheet_name):
             location = row[location_col].strip() if location_col is not None and len(row) > location_col else ""
             time_str = row[time_col].strip() if time_col is not None and len(row) > time_col else ""
             
+            # Extract additional fields
+            transportation = row[transportation_col].strip() if transportation_col is not None and len(row) > transportation_col else ""
+            release_time = row[release_col].strip() if release_col is not None and len(row) > release_col else ""
+            departure_time = row[departure_col].strip() if departure_col is not None and len(row) > departure_col else ""
+            attire = row[attire_col].strip() if attire_col is not None and len(row) > attire_col else ""
+            notes = row[notes_col].strip() if notes_col is not None and len(row) > notes_col else ""
+            bus = row[bus_col].strip() if bus_col is not None and len(row) > bus_col else ""
+            vans = row[vans_col].strip() if vans_col is not None and len(row) > vans_col else ""
+            
+            # Build description with all available information
+            description_parts = [f"Location: {location}"]
+            
+            if time_str:
+                description_parts.append(f"Time: {time_str}")
+            
+            # Add additional fields to description if they have values
+            if transportation and transportation.strip():
+                description_parts.append(f"Transportation: {transportation}")
+            if release_time and release_time.strip():
+                description_parts.append(f"Release Time: {release_time}")
+            if departure_time and departure_time.strip():
+                description_parts.append(f"Departure Time: {departure_time}")
+            if attire and attire.strip():
+                description_parts.append(f"Attire: {attire}")
+            if notes and notes.strip():
+                description_parts.append(f"Notes: {notes}")
+            if bus and bus.strip():
+                description_parts.append(f"Bus: {bus}")
+            if vans and vans.strip():
+                description_parts.append(f"Vans: {vans}")
+            
+            description = "\n".join(description_parts)
+            
             # Create event
             event_dict = {
                 "summary": f"{sport_name} - {event_name} at {location}",
-                "description": f"Location: {location}",
+                "description": description,
                 "location": location,
                 "start": {
                     "date": date_obj.strftime("%Y-%m-%d")
@@ -164,9 +220,21 @@ def parse_sports_events(sheet_data, sheet_name):
                 }
             }
             
-            # Add time information to description if available
-            if time_str:
-                event_dict["description"] += f"\nTime: {time_str}"
+            # Add custom fields for additional data
+            if transportation and transportation.strip():
+                event_dict["transportation"] = transportation
+            if release_time and release_time.strip():
+                event_dict["release_time"] = release_time
+            if departure_time and departure_time.strip():
+                event_dict["departure_time"] = departure_time
+            if attire and attire.strip():
+                event_dict["attire"] = attire
+            if notes and notes.strip():
+                event_dict["notes"] = notes
+            if bus and bus.strip():
+                event_dict["bus"] = bus
+            if vans and vans.strip():
+                event_dict["vans"] = vans
             
             events.append(event_dict)
             logger.debug(f"Created event: {event_dict['summary']}")

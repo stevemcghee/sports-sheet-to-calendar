@@ -73,7 +73,14 @@ def parse_sheet_with_gemini(values, model=None):
                         "timeZone": "America/Los_Angeles"
                     }},
                     "location": "event location",
-                    "description": "Location: location"
+                    "description": "Location: location\\nTime: time\\nTransportation: transportation\\nRelease Time: release_time\\nDeparture Time: departure_time\\nAttire: attire\\nNotes: notes\\nBus: bus\\nVans: vans",
+                    "transportation": "transportation value if available",
+                    "release_time": "release time value if available",
+                    "departure_time": "departure time value if available",
+                    "attire": "attire value if available",
+                    "notes": "notes value if available",
+                    "bus": "bus value if available",
+                    "vans": "vans value if available"
                 }}
             ]
         }}
@@ -90,7 +97,14 @@ def parse_sheet_with_gemini(values, model=None):
                         "date": "YYYY-MM-DD"
                     }},
                     "location": "event location",
-                    "description": "Location: location"
+                    "description": "Location: location\\nTransportation: transportation\\nRelease Time: release_time\\nDeparture Time: departure_time\\nAttire: attire\\nNotes: notes\\nBus: bus\\nVans: vans",
+                    "transportation": "transportation value if available",
+                    "release_time": "release time value if available",
+                    "departure_time": "departure time value if available",
+                    "attire": "attire value if available",
+                    "notes": "notes value if available",
+                    "bus": "bus value if available",
+                    "vans": "vans value if available"
                 }}
             ]
         }}
@@ -103,14 +117,23 @@ def parse_sheet_with_gemini(values, model=None):
            - First row contains the sport name
            - Second row contains column headers
            - Subsequent rows contain event data
-           - Required columns: "Start Datetime", "Event", "Location"
-           - Optional columns: "End Datetime", "Recurrence"
+           - Required columns: "Date", "Event/Opponent", "Location"
+           - Optional columns: "Time", "Transportation", "Release Time", "Departure Time", "Attire", "Notes", "Bus", "Vans"
 
         2. Event Formatting:
            - Summary format: "{{sport_name}}: {{event_name}} @ {{location}}"
-           - Description format: "Location: {{location}}"
-           - All events must have a start datetime
-           - If end datetime is not provided, add 2 hours to start time
+           - Description format: Include all available information in this order:
+             * Location: {{location}}
+             * Time: {{time}} (if available)
+             * Transportation: {{transportation}} (if available)
+             * Release Time: {{release_time}} (if available)
+             * Departure Time: {{departure_time}} (if available)
+             * Attire: {{attire}} (if available)
+             * Notes: {{notes}} (if available)
+             * Bus: {{bus}} (if available)
+             * Vans: {{vans}} (if available)
+           - All events must have a date
+           - If time is not provided, create an all-day event
            - Use America/Los_Angeles timezone for all events
 
         3. Datetime Handling:
