@@ -1,0 +1,17 @@
+# Example terraform.tfvars file
+# Copy this to terraform.tfvars and fill in the sensitive values
+
+project_id = "stevemcghee-slosports"
+region     = "us-central1"
+
+# These values are already set as defaults in variables.tf
+# spreadsheet_id = "1DiA6HTQjDiPzEua_kxcw175C-uMWGnIq_PAKICbiMzQ"
+# smtp_username = "sloswimtiming@gmail.com"
+# to_email = "sloswimtiming@gmail.com"
+
+# Sensitive values - you must provide these
+smtp_password        = "your-smtp-password-here"
+flask_secret_key     = "your-flask-secret-key-here"
+gemini_api_key       = "your-gemini-api-key-here"
+google_client_id     = "your-google-client-id-here"
+google_client_secret = "your-google-client-secret-here" 
