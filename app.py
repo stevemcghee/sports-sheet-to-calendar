@@ -242,8 +242,11 @@ def auth():
         # Clear any existing credentials to force fresh authentication
         session.pop('credentials', None)
         
-        # Get the redirect URI from the request
-        redirect_uri = request.url_root.rstrip('/') + '/auth/callback'
+        # Get the redirect URI from the request, force HTTPS
+        base_url = request.url_root.rstrip('/')
+        if base_url.startswith('http://'):
+            base_url = base_url.replace('http://', 'https://')
+        redirect_uri = base_url + '/auth/callback'
         logger.debug(f"Using redirect URI: {redirect_uri}")
         
         flow = InstalledAppFlow.from_client_secrets_file(
@@ -278,8 +281,11 @@ def auth_callback():
             </html>
             """
             
-        # Get the redirect URI from the request
-        redirect_uri = request.url_root.rstrip('/') + '/auth/callback'
+        # Get the redirect URI from the request, force HTTPS
+        base_url = request.url_root.rstrip('/')
+        if base_url.startswith('http://'):
+            base_url = base_url.replace('http://', 'https://')
+        redirect_uri = base_url + '/auth/callback'
         logger.debug(f"Using redirect URI: {redirect_uri}")
             
         flow = InstalledAppFlow.from_client_secrets_file(
@@ -1320,6 +1326,42 @@ def get_current_calendar():
         logger.error(f"Error in get_current_calendar: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/trigger-sync', methods=['POST'])
+def trigger_sync():
+    """Trigger the automated sync process from scheduler."""
+    try:
+        logger.info("Automated sync triggered by scheduler")
+        
+        # Import the automated sync function
+        from automated_sync import main as run_automated_sync
+        
+        # Run the sync
+        success = run_automated_sync()
+        
+        if success:
+            logger.info("Automated sync completed successfully")
+            return jsonify({
+                'success': True,
+                'message': 'Sync completed successfully',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            logger.error("Automated sync failed")
+            return jsonify({
+                'success': False,
+                'message': 'Sync failed',
+                'timestamp': datetime.now().isoformat()
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error in trigger_sync: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

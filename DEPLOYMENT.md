@@ -64,7 +64,7 @@ GEMINI_API_KEY=your_gemini_api_key  # Optional
 SPREADSHEET_ID=your_default_spreadsheet_id  # Optional
 ```
 
-## Option 2: Google Cloud Platform (Automated)
+## Option 2: Google Cloud Run (Recommended for Automation)
 
 ### Prerequisites
 - Google Cloud SDK installed
@@ -76,19 +76,42 @@ SPREADSHEET_ID=your_default_spreadsheet_id  # Optional
 1. **Install and Authenticate**:
    ```bash
    gcloud auth login
+   gcloud auth application-default login
    gcloud config set project YOUR_PROJECT_ID
    ```
 
 2. **Run Deployment Script**:
    ```bash
-   chmod +x deploy.sh
-   ./deploy.sh YOUR_PROJECT_ID
+   ./deploy_cloud_run.sh YOUR_PROJECT_ID
    ```
 
 3. **Verify Deployment**:
    - Check Cloud Run service is running
    - Verify Cloud Scheduler job is created
    - Test the web interface
+
+### Manual Deployment
+
+```bash
+# Deploy to Cloud Run
+gcloud run deploy calendar-sync \
+  --source . \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 1Gi \
+  --cpu 1 \
+  --timeout 300 \
+  --concurrency 80 \
+  --max-instances 10
+
+# Set up Cloud Scheduler
+gcloud scheduler jobs create http calendar-sync-job \
+  --schedule="0 * * * *" \
+  --uri="YOUR_SERVICE_URL/trigger-sync" \
+  --http-method=POST \
+  --location=us-central1
+```
 
 ### Manual GCP Deployment
 
@@ -214,27 +237,34 @@ docker-compose up -d
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GOOGLE_CLIENT_ID` | OAuth client ID | `123456789-abcdef.apps.googleusercontent.com` |
-| `GOOGLE_CLIENT_SECRET` | OAuth client secret | `GOCSPX-abcdefghijklmnop` |
+| `SPREADSHEET_ID` | Google Spreadsheet ID | `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms` |
+| `GEMINI_API_KEY` | Gemini AI API key | `AIzaSyC...` |
 | `FLASK_SECRET_KEY` | Flask session key | `a1b2c3d4e5f6...` |
 
 ### Optional Variables
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GEMINI_API_KEY` | Gemini AI API key | `AIzaSyC...` |
-| `SPREADSHEET_ID` | Default spreadsheet | `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms` |
+| `GOOGLE_CLIENT_ID` | OAuth client ID (web interface) | `123456789-abcdef.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | OAuth client secret (web interface) | `GOCSPX-abcdefghijklmnop` |
 | `GOOGLE_PROJECT_ID` | GCP project ID | `my-calendar-sync-project` |
+| `SEND_EMAIL` | Enable email notifications | `true` |
+| `USE_GEMINI` | Use Gemini parser | `true` |
 
 ### Environment File (.env)
 
 For local development, create a `.env` file:
 ```
+# Required variables
+SPREADSHEET_ID=your_spreadsheet_id
+GEMINI_API_KEY=your_gemini_key
+FLASK_SECRET_KEY=your_secret_key
+
+# Optional variables
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
-FLASK_SECRET_KEY=your_secret_key
-GEMINI_API_KEY=your_gemini_key
-SPREADSHEET_ID=your_spreadsheet_id
+SEND_EMAIL=true
+USE_GEMINI=true
 ```
 
 ## Security Considerations

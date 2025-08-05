@@ -16,10 +16,48 @@ A comprehensive Google Calendar synchronization system that syncs sports events 
 
 ## Quick Start
 
+### 1. Set up Virtual Environment
+
+**Option A: Automated Setup (Recommended)**
+```bash
+./setup_venv.sh
+```
+
+**Option B: Manual Setup**
+```bash
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate  # On macOS/Linux
+# venv\Scripts\activate   # On Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Configure Environment
+
+**Option A: Interactive Setup (Recommended)**
+```bash
+python setup_env.py
+```
+
+**Option B: Manual Setup**
+Create a `.env` file with your settings:
+```bash
+SPREADSHEET_ID=your-spreadsheet-id
+GEMINI_API_KEY=your-gemini-api-key
+FLASK_SECRET_KEY=your-secret-key
+```
+
 ### Option 1: Web Interface (Recommended)
 
 1. **Start the web application**:
    ```bash
+   # Make sure virtual environment is activated
+   source venv/bin/activate
+   
    python app.py
    ```
    
@@ -44,6 +82,9 @@ A comprehensive Google Calendar synchronization system that syncs sports events 
 For automated or batch processing:
 
 ```bash
+# Make sure virtual environment is activated
+source venv/bin/activate
+
 python calendar_sync.py
 ```
 
@@ -76,9 +117,14 @@ python calendar_sync.py
 ```bash
 git clone <repository-url>
 cd google_calendar_sync
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+
+# Set up virtual environment
+./setup_venv.sh
+
+# Or manually:
+# python3 -m venv venv
+# source venv/bin/activate  # On Windows: venv\Scripts\activate
+# pip install -r requirements.txt
 ```
 
 ### 2. Google Cloud Project Setup
@@ -159,7 +205,32 @@ The Google Spreadsheet should follow this structure:
    - Set start command: `gunicorn app:app`
    - Add environment variables (see `render_env_setup.md`)
 
-### Option 2: Google Cloud Platform
+### Option 2: Google Cloud Run (Recommended for Automation)
+
+For automated deployment with Cloud Scheduler and advanced monitoring:
+
+```bash
+# Deploy to Cloud Run
+./deploy_cloud_run.sh YOUR_PROJECT_ID
+```
+
+This will:
+- Enable required Google Cloud APIs
+- Build and deploy the container to Cloud Run
+- Set up hourly Cloud Scheduler job
+- Create service accounts for security
+- Configure monitoring and logging
+
+**Benefits of Cloud Run:**
+- Built-in scheduling with Cloud Scheduler
+- Advanced monitoring and logging
+- Automatic scaling
+- Better cost optimization
+- Native Google Cloud integration
+
+See `CLOUD_RUN_DEPLOYMENT.md` for detailed instructions.
+
+### Option 3: Google Cloud Platform (Legacy)
 
 For automated deployment with Cloud Scheduler:
 
@@ -176,21 +247,27 @@ This will:
 
 ## Environment Variables
 
-### Required for Web Interface
-- `GOOGLE_CLIENT_ID`: Your Google OAuth client ID
-- `GOOGLE_CLIENT_SECRET`: Your Google OAuth client secret
+### Required Variables
+- `SPREADSHEET_ID`: Your Google Spreadsheet ID
+- `GEMINI_API_KEY`: Your Gemini API key (for AI parsing)
 - `FLASK_SECRET_KEY`: A random secret key for Flask sessions
 
-### Optional
-- `SPREADSHEET_ID`: Default spreadsheet ID
-- `GEMINI_API_KEY`: For AI-powered parsing
+### Optional Variables
+- `GOOGLE_CLIENT_ID`: Your Google OAuth client ID (for web interface)
+- `GOOGLE_CLIENT_SECRET`: Your Google OAuth client secret (for web interface)
 - `GOOGLE_PROJECT_ID`: For GCP deployment
+- `SEND_EMAIL`: Enable email notifications (true/false)
+- `USE_GEMINI`: Use Gemini parser (true/false)
+- Email configuration (SMTP_* variables) for notifications
 
 ## Testing
 
 Run the comprehensive test suite:
 
 ```bash
+# Make sure virtual environment is activated
+source venv/bin/activate
+
 # All tests
 python -m pytest
 

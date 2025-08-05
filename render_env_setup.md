@@ -6,26 +6,36 @@ This guide covers setting up environment variables for deploying the Google Cale
 
 Set these in your Render dashboard under your web service's "Environment" tab:
 
-### 1. Google OAuth Credentials (Required)
+### 1. Core Application Variables (Required)
+```
+SPREADSHEET_ID=your_spreadsheet_id
+GEMINI_API_KEY=your_gemini_api_key
+FLASK_SECRET_KEY=your_generated_secret_key
+```
+
+### 2. Google OAuth Credentials (Required for Web Interface)
 ```
 GOOGLE_CLIENT_ID=your_google_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 GOOGLE_PROJECT_ID=your_google_cloud_project_id
 ```
 
-### 2. Flask Secret Key (Required)
+### 3. Optional: Email Notifications
 ```
-FLASK_SECRET_KEY=your_generated_secret_key
+SEND_EMAIL=true
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+FROM_EMAIL=your-email@gmail.com
+TO_EMAIL=recipient@example.com
 ```
 
-### 3. Optional: Default Spreadsheet ID
+### 4. Optional: Sync Configuration
 ```
-SPREADSHEET_ID=your_default_spreadsheet_id
-```
-
-### 4. Optional: Gemini API Key (for AI parsing)
-```
-GEMINI_API_KEY=your_gemini_api_key
+USE_GEMINI=true
+LOG_LEVEL=INFO
+TIMEZONE=America/Los_Angeles
 ```
 
 ## How to Get These Values
@@ -122,17 +132,20 @@ print(secrets.token_hex(32))
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GOOGLE_CLIENT_ID` | Google OAuth client ID | `123456789-abcdef.apps.googleusercontent.com` |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | `GOCSPX-abcdefghijklmnop` |
-| `GOOGLE_PROJECT_ID` | Google Cloud project ID | `my-calendar-sync-project` |
+| `SPREADSHEET_ID` | Google Spreadsheet ID | `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms` |
+| `GEMINI_API_KEY` | Gemini AI API key for AI parsing | `AIzaSyC...` |
 | `FLASK_SECRET_KEY` | Flask session secret key | `a1b2c3d4e5f6...` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID (web interface) | `123456789-abcdef.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret (web interface) | `GOCSPX-abcdefghijklmnop` |
+| `GOOGLE_PROJECT_ID` | Google Cloud project ID | `my-calendar-sync-project` |
 
 ### Optional Variables
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GEMINI_API_KEY` | Gemini AI API key for AI parsing | `AIzaSyC...` |
-| `SPREADSHEET_ID` | Default spreadsheet ID | `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms` |
+| `SEND_EMAIL` | Enable email notifications | `true` |
+| `USE_GEMINI` | Use Gemini parser | `true` |
+| `SMTP_*` | Email server configuration | See email_config.md |
 
 ## Testing Your Setup
 

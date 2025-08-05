@@ -462,56 +462,30 @@ def parse_sports_events(data, sheet_name=None):
                             hour += 12
                         return dtime(hour, minute)
                     return None
-                if parsed_time is None:
-                    # All-day event - use date format instead of dateTime
-                    if end_date:
-                        # Multi-day event (inclusive range)
-                        end_date_for_calendar = end_date + timedelta(days=1)  # Google Calendar end date is exclusive
-                    else:
-                        # Single-day event
-                        end_date_for_calendar = start_date + timedelta(days=1)  # Google Calendar end date is exclusive
-                    
-                    event_dict = {
-                        "summary": f"{sport_name} - {event} at {location}",
-                        "description": f"Location: {location}",
-                        "location": location,
-                        "start": {
-                            "date": start_date.strftime("%Y-%m-%d")
-                        },
-                        "end": {
-                            "date": end_date_for_calendar.strftime("%Y-%m-%d")
-                        }
-                    }
+                # For sports events, always create all-day events for consistency
+                if end_date:
+                    # Multi-day event (inclusive range)
+                    end_date_for_calendar = end_date + timedelta(days=1)  # Google Calendar end date is exclusive
                 else:
-                    # Timed event - use dateTime format
-                    # If multiple times, use first as start, last as end
-                    last_time = extract_last_time(time_str)
-                    start_datetime = datetime.combine(start_date, parsed_time)
-                    if last_time and (last_time != parsed_time):
-                        end_datetime = datetime.combine(start_date, last_time) + timedelta(hours=2)
-                    else:
-                        end_datetime = start_datetime + timedelta(hours=2)
-                    
-                    # Format with zero-padding for month/day to match test expectations, except for locations_as_times test
-                    def fmt(dt):
-                        # Special case for locations_as_times test: remove zero-padding from day
-                        if sport_name and 'golf' in sport_name.lower() and dt.month == 3:
-                            return f"{dt.year}-{dt.month:02d}-{dt.day}T{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
-                        return f"{dt.year}-{dt.month:02d}-{dt.day:02d}T{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
-                    
-                    event_dict = {
-                        "summary": f"{sport_name} - {event} at {location}",
-                        "description": f"Location: {location}",
-                        "location": location,
-                        "start": {
-                            "dateTime": fmt(start_datetime),
-                            "timeZone": "America/Los_Angeles"
-                        },
-                        "end": {
-                            "dateTime": fmt(end_datetime),
-                            "timeZone": "America/Los_Angeles"
-                        }
+                    # Single-day event
+                    end_date_for_calendar = start_date + timedelta(days=1)  # Google Calendar end date is exclusive
+                
+                # Include time information in description if available
+                description = f"Location: {location}"
+                if parsed_time:
+                    description += f"\nTime: {time_str}"
+                
+                event_dict = {
+                    "summary": f"{sport_name} - {event} at {location}",
+                    "description": description,
+                    "location": location,
+                    "start": {
+                        "date": start_date.strftime("%Y-%m-%d")
+                    },
+                    "end": {
+                        "date": end_date_for_calendar.strftime("%Y-%m-%d")
                     }
+                }
                 events.append(event_dict)
                 logger.debug(f"Successfully created event: {event_dict['summary']}")
             except Exception as e:
@@ -1102,6 +1076,8 @@ def update_calendar(service, events, calendar_id):
         logger.info(f"Events to insert: {[event.get('summary', 'Unknown') for event in events_to_insert]}")
         logger.info(f"Events to update: {[event.get('summary', 'Unknown') for event in events_to_change]}")
         logger.info(f"Events to delete: {[existing_events_dict[key].get('summary', 'Unknown') for key in events_to_delete]}")
+        
+
         
         # Delete events
         for event_key in events_to_delete:
