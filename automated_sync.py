@@ -176,6 +176,20 @@ class SyncReporter:
             </div>
         """
         
+        # Add parsing errors section
+        if self.sync_results['parsing_errors']:
+            html_content += "<h2>⚠️ Parsing Errors</h2>"
+            html_content += "<p><em>These errors occurred while parsing spreadsheet data but didn't prevent the sync from completing:</em></p>"
+            for error in self.sync_results['parsing_errors']:
+                html_content += f"""
+                <div class="error">
+                    <p><strong>Sheet:</strong> {error['sheet']}</p>
+                    <p><strong>Error:</strong> {error['error']}</p>
+                    """
+                if error.get('row_data'):
+                    html_content += f"<p><strong>Row Data:</strong> {error['row_data']}</p>"
+                html_content += "</div>"
+        
         # Add sheet details
         if self.sync_results['sheet_details']:
             html_content += "<h2>📋 Sheet Details</h2>"
@@ -210,20 +224,6 @@ class SyncReporter:
                     <p><strong>Error:</strong> {error['error']}</p>
                 </div>
                 """
-        
-        # Add parsing errors section
-        if self.sync_results['parsing_errors']:
-            html_content += "<h2>⚠️ Parsing Errors</h2>"
-            html_content += "<p><em>These errors occurred while parsing spreadsheet data but didn't prevent the sync from completing:</em></p>"
-            for error in self.sync_results['parsing_errors']:
-                html_content += f"""
-                <div class="error">
-                    <p><strong>Sheet:</strong> {error['sheet']}</p>
-                    <p><strong>Error:</strong> {error['error']}</p>
-                    """
-                if error.get('row_data'):
-                    html_content += f"<p><strong>Row Data:</strong> {error['row_data']}</p>"
-                html_content += "</div>"
         
         html_content += """
         </body>
@@ -290,21 +290,18 @@ def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_g
                 'total_events': 0
             }
         
-        # Set up a custom log handler to capture parsing errors from calendar_sync module
+        # Set up a custom log handler to capture parsing errors from any logger
         parsing_errors = []
-        original_handlers = []
-        
-        # Get the calendar_sync logger and store its original handlers
-        calendar_sync_logger = logging.getLogger('calendar_sync')
-        original_handlers = calendar_sync_logger.handlers[:]
         
         class ParsingErrorHandler(logging.Handler):
             def emit(self, record):
                 if record.levelno == logging.ERROR and 'Error parsing row' in record.getMessage():
                     parsing_errors.append(record.getMessage())
         
+        # Add the handler to the root logger to catch all parsing errors
         error_handler = ParsingErrorHandler()
-        calendar_sync_logger.addHandler(error_handler)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(error_handler)
         
         try:
             # Parse events
@@ -320,16 +317,16 @@ def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_g
             else:
                 events = parse_sports_events(values, sheet_name)
         finally:
-            # Remove the custom handler and restore original handlers
-            calendar_sync_logger.removeHandler(error_handler)
-            for handler in calendar_sync_logger.handlers[:]:
-                if handler not in original_handlers:
-                    calendar_sync_logger.removeHandler(handler)
+            # Remove the custom handler
+            root_logger.removeHandler(error_handler)
         
         # Add parsing errors to reporter if available
         if reporter and parsing_errors:
+            logger.info(f"Captured {len(parsing_errors)} parsing errors for sheet {sheet_name}")
             for error_msg in parsing_errors:
                 reporter.add_parsing_error(sheet_name, error_msg)
+        elif parsing_errors:
+            logger.info(f"Parsing errors captured but no reporter available: {parsing_errors}")
         
         if not events:
             return {
