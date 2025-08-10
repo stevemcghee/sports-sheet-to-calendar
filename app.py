@@ -1357,6 +1357,11 @@ def trigger_sync():
     except Exception as e:
         logger.error(f"Error in trigger_sync: {str(e)}")
         logger.error(traceback.format_exc())
+        try:
+            from automated_sync import send_failure_email
+            send_failure_email("/trigger-sync endpoint failure", e)
+        except Exception as notify_err:
+            logger.error(f"Failed to send failure email from trigger_sync: {notify_err}")
         return jsonify({
             'success': False,
             'error': str(e),
