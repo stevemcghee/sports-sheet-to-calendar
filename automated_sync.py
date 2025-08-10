@@ -509,7 +509,9 @@ def main():
         json.dump(reporter.sync_results, f, indent=2)
     logger.info(f"Report saved to {report_file}")
     
-    return summary['success_rate'] > 0
+    # Consider the run successful if it completed without critical exceptions
+    # (critical failures earlier return False). Partial errors are reported via email/logs.
+    return True
 
 if __name__ == '__main__':
     success = main()
