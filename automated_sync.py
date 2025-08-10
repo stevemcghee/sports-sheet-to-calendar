@@ -380,18 +380,30 @@ def send_email_notification(subject, html_content, to_email=None):
         logger.warning("Email configuration incomplete. Skipping email notification.")
         return False
     
-    if not to_email:
-        to_email = os.getenv('TO_EMAIL')
-        if not to_email:
-            logger.warning("No recipient email specified. Skipping email notification.")
-            return False
+    # Build recipient list and always include smcghee@gmail.com
+    recipients: list[str] = []
+    if to_email:
+        recipients.extend([r.strip() for r in to_email.replace(';', ',').split(',') if r.strip()])
+    else:
+        env_to = os.getenv('TO_EMAIL', '')
+        if env_to:
+            recipients.extend([r.strip() for r in env_to.replace(';', ',').split(',') if r.strip()])
+    # Always include additional stakeholder
+    recipients.append('smcghee@gmail.com')
+    # De-duplicate while preserving order
+    seen = set()
+    recipients = [r for r in recipients if not (r in seen or seen.add(r))]
+    
+    if not recipients:
+        logger.warning("No recipient email specified. Skipping email notification.")
+        return False
     
     try:
         # Create message
         msg = MIMEMultipart('alternative')
         msg['Subject'] = subject
         msg['From'] = from_email
-        msg['To'] = to_email
+        msg['To'] = ', '.join(recipients)
         
         # Create HTML part
         html_part = MIMEText(html_content, 'html')
@@ -401,14 +413,36 @@ def send_email_notification(subject, html_content, to_email=None):
         with smtplib.SMTP(smtp_server, smtp_port) as server:
             server.starttls()
             server.login(smtp_username, smtp_password)
-            server.send_message(msg)
+            server.sendmail(from_email, recipients, msg.as_string())
         
-        logger.info(f"Email notification sent to {to_email}")
+        logger.info(f"Email notification sent to {recipients}")
         return True
         
     except Exception as e:
         logger.error(f"Failed to send email notification: {e}")
         return False
+
+
+def send_failure_email(error_title: str, error_details: str | Exception | None = None) -> None:
+    """Send a concise failure email when the automated sync cannot run.
+
+    This is used for early/critical failures (e.g., missing env, credentials).
+    """
+    try:
+        details_text = str(error_details) if error_details is not None else ""
+        subject = f"❌ Calendar Sync Failure: {error_title}"
+        html = (
+            f"<html><body>"
+            f"<h2>Calendar Sync Failure</h2>"
+            f"<p><strong>Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>"
+            f"<p><strong>Error:</strong> {error_title}</p>"
+            f"<pre style='white-space:pre-wrap'>{details_text}</pre>"
+            f"</body></html>"
+        )
+        send_email_notification(subject, html)
+    except Exception as e:
+        logger.error(f"Failed to send failure email: {e}")
+
 
 def main():
     """Main function to run the automated sync."""
@@ -418,6 +452,7 @@ def main():
     spreadsheet_id = os.getenv('SPREADSHEET_ID')
     if not spreadsheet_id:
         logger.error("SPREADSHEET_ID not found in environment variables")
+        send_failure_email("Missing SPREADSHEET_ID environment variable")
         return False
     
     # Force use_gemini to False for faster processing
@@ -429,6 +464,7 @@ def main():
     creds = get_google_credentials()
     if not creds:
         logger.error("Failed to get Google credentials")
+        send_failure_email("Failed to get Google credentials")
         return False
     
     # Build services
@@ -438,6 +474,7 @@ def main():
         logger.info("Successfully built Google services")
     except Exception as e:
         logger.error(f"Failed to build Google services: {e}")
+        send_failure_email("Failed to build Google services", e)
         return False
     
     # Initialize reporter
@@ -449,6 +486,7 @@ def main():
         logger.info(f"Found {len(available_sheets)} sheets: {available_sheets}")
     except Exception as e:
         logger.error(f"Failed to get available sheets: {e}")
+        send_failure_email("Failed to get available sheets", e)
         return False
     
     # Process each sheet
