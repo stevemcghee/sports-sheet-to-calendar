@@ -8,11 +8,13 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
+# Configure Gemini (lazy)
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
-genai.configure(api_key=GEMINI_API_KEY)
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    # Defer error until model is actually used
+    logger.warning("GEMINI_API_KEY not found; Gemini-backed parsing will be unavailable.")
 
 # Configure safety settings
 safety_settings = [
@@ -34,8 +36,14 @@ safety_settings = [
     },
 ]
 
-# Initialize the model with safety settings
-model = genai.GenerativeModel('models/gemini-1.5-pro-latest', safety_settings=safety_settings)
+# Lazy initializer for the model
+def _get_model():
+    api_key = os.getenv('GEMINI_API_KEY')
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY not found in environment variables")
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel('models/gemini-1.5-pro-latest', safety_settings=safety_settings)
+
 
 def parse_datetime_with_gemini(datetime_str: str) -> str:
     """
@@ -68,6 +76,7 @@ def parse_datetime_with_gemini(datetime_str: str) -> str:
         
         Response (ISO format only): """
         
+        model = _get_model()
         response = model.generate_content(prompt)
         parsed_datetime = response.text.strip()
         
@@ -106,6 +115,7 @@ def parse_datetime_with_gemini(datetime_str: str) -> str:
         logger.error(f"Error parsing datetime with Gemini: {str(e)}")
         raise ValueError(f"Failed to parse datetime: {str(e)}")
 
+
 def parse_datetime_range_with_gemini(datetime_str: str) -> tuple[str, str]:
     """
     Parse a datetime range string using Gemini and return start and end ISO format strings in US/Pacific timezone.
@@ -136,6 +146,7 @@ def parse_datetime_range_with_gemini(datetime_str: str) -> tuple[str, str]:
         
         Response (two ISO formats separated by comma only): """
         
+        model = _get_model()
         response = model.generate_content(prompt)
         parsed_range = response.text.strip()
         

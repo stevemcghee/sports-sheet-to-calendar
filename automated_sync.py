@@ -16,13 +16,12 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import traceback
+import pickle
+import html
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from google.auth.exceptions import RefreshError
-import pickle
-
-# Import our sync functions
 from calendar_sync import (
     get_spreadsheet_data, parse_sports_events,
     create_or_get_sports_calendar, update_calendar, get_existing_events,
@@ -104,6 +103,64 @@ class SyncReporter:
         }
         
         return self.sync_results['summary']
+
+    def _event_signature(self, event: dict) -> str:
+        start = event.get('start', {})
+        end = event.get('end', {})
+        start_str = start.get('dateTime') or start.get('date') or '?'
+        end_str = end.get('dateTime') or end.get('date') or '?'
+        summary = event.get('summary', '')
+        location = event.get('location', '')
+        return f"{start_str} -> {end_str} | {summary} | {location}"
+
+    def _render_sheet_diff(self, sheet_name: str, details: dict) -> str:
+        if not details:
+            return ""
+        lines = [f"Changes Diff for {sheet_name}:"]
+        # Inserted
+        for ev in details.get('inserted', []):
+            sig = self._event_signature(ev)
+            desc = (ev.get('description') or '').strip()
+            lines.append(f"+++ inserted: {sig}")
+            if desc:
+                lines.append(f"+ description: {desc}")
+        # Deleted
+        for ev in details.get('deleted', []):
+            sig = self._event_signature(ev)
+            desc = (ev.get('description') or '').strip()
+            lines.append(f"--- deleted: {sig}")
+            if desc:
+                lines.append(f"- description: {desc}")
+        # Updated
+        for pair in details.get('updated', []):
+            before = pair.get('before', {})
+            after = pair.get('after', {})
+            lines.append(f"--- before: {self._event_signature(before)}")
+            lines.append(f"+++ after:  {self._event_signature(after)}")
+            # Field diffs
+            fields = ['summary', 'location', 'description']
+            # Start/End handled specially
+            b_start = before.get('start', {}).get('dateTime') or before.get('start', {}).get('date')
+            a_start = after.get('start', {}).get('dateTime') or after.get('start', {}).get('date')
+            b_end = before.get('end', {}).get('dateTime') or before.get('end', {}).get('date')
+            a_end = after.get('end', {}).get('dateTime') or after.get('end', {}).get('date')
+            if b_start != a_start:
+                lines.append(f"- start: {b_start}")
+                lines.append(f"+ start: {a_start}")
+            if b_end != a_end:
+                lines.append(f"- end: {b_end}")
+                lines.append(f"+ end: {a_end}")
+            for f in fields:
+                b = (before.get(f) or '').strip()
+                a = (after.get(f) or '').strip()
+                if b != a:
+                    if b:
+                        lines.append(f"- {f}: {b}")
+                    if a:
+                        lines.append(f"+ {f}: {a}")
+        # Escape HTML and join
+        escaped = html.escape("\n".join(lines))
+        return f"<details><summary>View diff</summary><pre style='white-space:pre-wrap; background:#f8f8f8; padding:8px; border-radius:4px;'>{escaped}</pre></details>"
     
     def generate_email_content(self):
         """Generate HTML email content with detailed report."""
@@ -138,6 +195,7 @@ class SyncReporter:
                 h2 {{ margin: 0 0 8px 0; }}
                 h3 {{ margin: 0 0 4px 0; }}
                 p {{ margin: 4px 0; }}
+                details > summary {{ cursor: pointer; }}
             </style>
         </head>
         <body>
@@ -207,6 +265,10 @@ class SyncReporter:
                     <p><strong>Events Deleted:</strong> {result.get('events_deleted', 0)}</p>
                     <p><strong>Total Events:</strong> {result.get('total_events', 0)}</p>
                     """
+                    # Render diff for this sheet if available
+                    diff_html = self._render_sheet_diff(sheet_name, result.get('details'))
+                    if diff_html:
+                        html_content += diff_html
                 else:
                     html_content += f"""
                     <p class="error"><strong>Error:</strong> {result.get('error', 'Unknown error')}</p>
@@ -287,7 +349,8 @@ def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_g
                 'events_created': 0,
                 'events_updated': 0,
                 'events_deleted': 0,
-                'total_events': 0
+                'total_events': 0,
+                'details': {'inserted': [], 'updated': [], 'deleted': []}
             }
         
         # Set up a custom log handler to capture parsing errors from any logger
@@ -335,15 +398,16 @@ def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_g
                 'events_updated': 0,
                 'events_deleted': 0,
                 'total_events': 0,
-                'message': 'No events found in sheet'
+                'message': 'No events found in sheet',
+                'details': {'inserted': [], 'updated': [], 'deleted': []}
             }
         
         # Create or get calendar
         calendar_name = f"SLOHS {sheet_name}"
         calendar_id = create_or_get_sports_calendar(service, calendar_name)
         
-        # Update calendar
-        deleted, inserted, changed = update_calendar(service, events, calendar_id)
+        # Update calendar (request detailed changes)
+        deleted, inserted, changed, details = update_calendar(service, events, calendar_id, return_detailed_changes=True)
         
         logger.info(f"Sheet {sheet_name}: {inserted} created, {changed} updated, {deleted} deleted")
         
@@ -352,7 +416,8 @@ def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_g
             'events_created': inserted,
             'events_updated': changed,
             'events_deleted': deleted,
-            'total_events': len(events)
+            'total_events': len(events),
+            'details': details
         }
         
     except Exception as e:
@@ -364,7 +429,8 @@ def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_g
             'events_created': 0,
             'events_updated': 0,
             'events_deleted': 0,
-            'total_events': 0
+            'total_events': 0,
+            'details': {'inserted': [], 'updated': [], 'deleted': []}
         }
 
 def send_email_notification(subject, html_content, to_email=None):

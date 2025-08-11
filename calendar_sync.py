@@ -1006,8 +1006,18 @@ def get_existing_events(service, calendar_id):
         logger.error(f"Error fetching existing events: {str(e)}")
         raise
 
-def update_calendar(service, events, calendar_id):
-    """Update calendar with new events."""
+def update_calendar(service, events, calendar_id, return_detailed_changes: bool = False):
+    """Update calendar with new events.
+
+    When return_detailed_changes is True, also return a dict with detailed change info:
+      {
+        'inserted': [event_after, ...],
+        'updated': [{'before': existing_event, 'after': new_event, 'key': event_key}, ...],
+        'deleted': [existing_event, ...]
+      }
+    Returns either (deleted_count, inserted_count, changed_count) or
+            (deleted_count, inserted_count, changed_count, details_dict)
+    """
     try:
         logger.info("Starting calendar update")
         logger.info(f"Processing {len(events)} events for calendar {calendar_id}")
@@ -1060,6 +1070,11 @@ def update_calendar(service, events, calendar_id):
         events_to_delete = set()
         events_to_insert = []
         events_to_change = []
+
+        # Detailed change tracking
+        inserted_events = []
+        updated_pairs = []  # list of {'before': existing_event, 'after': new_event, 'key': event_key}
+        deleted_events = []
         
         logger.info(f"Processing {len(events)} events for calendar update")
         for i, event in enumerate(events):
@@ -1120,12 +1135,16 @@ def update_calendar(service, events, calendar_id):
                     if not events_are_equal(event, existing_event):
                         logger.debug(f"Event needs update: {event_key}")
                         events_to_change.append(event)
+                        if return_detailed_changes:
+                            updated_pairs.append({'before': existing_event, 'after': event, 'key': event_key})
                     else:
                         logger.debug(f"Event unchanged: {event_key}")
                         events_to_keep.add(event_key)
                 else:
                     logger.debug(f"New event: {event_key}")
                     events_to_insert.append(event)
+                    if return_detailed_changes:
+                        inserted_events.append(event)
                     
             except Exception as e:
                 logger.error(f"Error processing event {i+1}: {str(e)}")
@@ -1139,14 +1158,14 @@ def update_calendar(service, events, calendar_id):
             if event_key not in events_to_keep:
                 logger.debug(f"Event to delete: {event_key}")
                 events_to_delete.add(event_key)
+                if return_detailed_changes:
+                    deleted_events.append(existing_events_dict[event_key])
         
         # Apply changes
         logger.info(f"Applying changes: {len(events_to_insert)} to insert, {len(events_to_change)} to update, {len(events_to_delete)} to delete")
         logger.info(f"Events to insert: {[event.get('summary', 'Unknown') for event in events_to_insert]}")
         logger.info(f"Events to update: {[event.get('summary', 'Unknown') for event in events_to_change]}")
         logger.info(f"Events to delete: {[existing_events_dict[key].get('summary', 'Unknown') for key in events_to_delete]}")
-        
-
         
         # Delete events
         for event_key in events_to_delete:
@@ -1210,6 +1229,14 @@ def update_calendar(service, events, calendar_id):
         
         logger.info("Calendar update completed successfully")
         logger.info(f"Summary: Inserted {len(events_to_insert)} events, Updated {len(events_to_change)} events, Deleted {len(events_to_delete)} events")
+        
+        if return_detailed_changes:
+            details = {
+                'inserted': inserted_events,
+                'updated': updated_pairs,
+                'deleted': deleted_events,
+            }
+            return len(events_to_delete), len(events_to_insert), len(events_to_change), details
         
         # Return the counts for tracking
         return len(events_to_delete), len(events_to_insert), len(events_to_change)
