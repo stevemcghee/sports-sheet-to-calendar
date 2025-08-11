@@ -33,7 +33,9 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev')
 # OAuth configuration
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
-    'https://www.googleapis.com/auth/calendar'
+    'https://www.googleapis.com/auth/calendar',
+    'openid',
+    'https://www.googleapis.com/auth/userinfo.email'
 ]
 
 # Configure Gemini
@@ -54,11 +56,7 @@ def get_google_credentials():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
+            return None
     return creds
 
 def get_sheets_service():
@@ -395,6 +393,26 @@ def apply_changes():
 
     except Exception as e:
         logger.error(f"Error in apply_changes route: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+import subprocess
+
+@app.route('/trigger_sync', methods=['POST'])
+def trigger_sync():
+    try:
+        # Get the absolute path to the automated_sync.py script
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'automated_sync.py'))
+        
+        # Get the absolute path to the python executable in the venv
+        python_executable = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'))
+
+        # Start the sync script as a background process
+        subprocess.Popen([python_executable, script_path])
+        
+        return jsonify({'success': True, 'message': 'Sync triggered successfully!'})
+    except Exception as e:
+        logger.error(f"Error triggering sync: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
 

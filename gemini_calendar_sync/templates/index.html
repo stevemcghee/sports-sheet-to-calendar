@@ -61,6 +61,7 @@
                     <input type="text" class="form-control" id="spreadsheet-id" placeholder="Enter spreadsheet ID">
                 </div>
                 <button id="load-sheet" class="btn btn-primary">Load Sheet</button>
+                <button id="trigger-sync" class="btn btn-secondary">Trigger Sync</button>
             </div>
         </div>
 
@@ -304,6 +305,24 @@
                 statusDiv.style.display = 'none';
             }, 5000);
         }
+
+        // Handle sync trigger
+        document.getElementById('trigger-sync').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/trigger_sync', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus('Sync triggered successfully!', 'success');
+                } else {
+                    showStatus('Error triggering sync: ' + data.error, 'danger');
+                }
+            } catch (error) {
+                showStatus('Error triggering sync: ' + error.message, 'danger');
+            }
+        });
     </script>
 </body>
 </html> 
