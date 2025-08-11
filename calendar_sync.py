@@ -896,6 +896,8 @@ def fix_event_times(event):
     except Exception as e:
         return False, f"Error fixing times: {str(e)}"
 
+import pytz
+
 def get_event_key(event):
     """Generate a unique key for an event based on its start/end times and summary."""
     start = event.get('start', {})
@@ -904,7 +906,8 @@ def get_event_key(event):
     # Get start time/date
     if 'dateTime' in start:
         # For datetime events, keep the full datetime string
-        start_str = start['dateTime'].split('T')[0]
+        dt = parser.isoparse(start['dateTime'])
+        start_str = dt.astimezone(pytz.timezone('America/Los_Angeles')).date().isoformat()
     elif 'date' in start:
         start_str = start['date']
     else:
@@ -931,10 +934,9 @@ def events_are_equal(event1, event2):
         if date1 != date2:
             return False
     elif 'dateTime' in start1 and 'dateTime' in start2:
-        # Strip timezone for comparison
-        date1 = re.sub(r'[+-]\d{2}:\d{2}', '', start1['dateTime'])
-        date2 = re.sub(r'[+-]\d{2}:\d{2}', '', start2['dateTime'])
-        if date1 != date2:
+        dt1 = parser.isoparse(start1['dateTime'])
+        dt2 = parser.isoparse(start2['dateTime'])
+        if dt1.astimezone(pytz.utc) != dt2.astimezone(pytz.utc):
             return False
     elif 'date' in start1 and 'date' in start2:
         if start1['date'] != start2['date']:
@@ -957,10 +959,9 @@ def events_are_equal(event1, event2):
         if date1 != date2:
             return False
     elif 'dateTime' in end1 and 'dateTime' in end2:
-        # Strip timezone for comparison
-        date1 = re.sub(r'[+-]\d{2}:\d{2}', '', end1['dateTime'])
-        date2 = re.sub(r'[+-]\d{2}:\d{2}', '', end2['dateTime'])
-        if date1 != date2:
+        dt1 = parser.isoparse(end1['dateTime'])
+        dt2 = parser.isoparse(end2['dateTime'])
+        if dt1.astimezone(pytz.utc) != dt2.astimezone(pytz.utc):
             return False
     elif 'date' in end1 and 'date' in end2:
         if end1['date'] != end2['date']:

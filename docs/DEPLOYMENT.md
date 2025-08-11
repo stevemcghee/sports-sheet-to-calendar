@@ -9,7 +9,6 @@ You can deploy this application using several methods, each suited for different
 | Platform | Recommended Use Case | Key Features |
 | :--- | :--- | :--- |
 | **Local Development** | Testing, debugging, and direct control | Full access to code, immediate feedback |
-| **Render** | Easy web interface hosting | Free tier, simple Git-based deployment |
 | **Google Cloud Run** | Robust, scalable automated sync | Pay-per-use, integrated scheduling, monitoring |
 | **Docker** | Containerized and portable deployments | Consistent environment, platform-agnostic |
 
@@ -73,42 +72,7 @@ Running the application on your local machine is ideal for development and testi
 
 ---
 
-## 2. Render Deployment
-
-Render is a great choice for deploying the web interface with minimal setup.
-
-### Prerequisites
-- A GitHub account with the project repository.
-- A Render account.
-
-### Steps
-
-1.  **Push Code to GitHub**:
-    Ensure your latest code is on a GitHub repository.
-
-2.  **Create a New Web Service on Render**:
-    - Log in to Render and click **New > Web Service**.
-    - Connect your GitHub repository.
-
-3.  **Configure Render Settings**:
-    - **Name**: A unique name for your service (e.g., `google-calendar-sync`).
-    - **Region**: Choose a region.
-    - **Branch**: Your main branch.
-    - **Build Command**: `pip install -r requirements.txt`
-    - **Start Command**: `gunicorn app:app`
-    - **Instance Type**: `Free` is sufficient for testing.
-
-4.  **Add Environment Variables**:
-    - In the Render dashboard, go to **Environment**.
-    - Add the same environment variables as listed in the local setup, including `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
-    - **Important**: Update your Google OAuth credentials to include the Render URL (`https://your-app-name.onrender.com/auth/callback`) as an authorized redirect URI.
-
-5.  **Deploy**:
-    - Click **Create Web Service**. Render will automatically build and deploy your application.
-
----
-
-## 3. Google Cloud Run Deployment
+## 2. Google Cloud Run Deployment
 
 Google Cloud Run is the recommended platform for running the automated, scheduled sync. Deployments are automated via a Cloud Build trigger that deploys the application whenever a pull request is merged into the `main` branch.
 
@@ -145,7 +109,7 @@ Google Cloud Run is the recommended platform for running the automated, schedule
 
 ---
 
-## 4. Docker Deployment
+## 3. Docker Deployment
 
 Docker provides a consistent and portable environment for the application.
 
@@ -180,7 +144,7 @@ Docker provides a consistent and portable environment for the application.
 
 ---
 
-## 5. Deploying Updates
+## 4. Deploying Updates
 
 After making code changes, you'll need to redeploy the application. The process varies depending on your deployment method.
 
@@ -196,17 +160,6 @@ After making code changes, you'll need to redeploy the application. The process 
     ```
 3.  **Restart the application**:
     Stop the running `app.py` or `calendar_sync.py` script and start it again.
-
-### Render
-
-Render makes updates simple. If you connected your GitHub repository, Render automatically redeploys your application whenever you push changes to the configured branch (e.g., `main`).
-
-1.  **Commit and push your changes** to GitHub:
-    ```bash
-    git commit -am "Add new feature"
-    git push origin main
-    ```
-2.  Render will detect the push, start a new build, and deploy the new version automatically. You can monitor the progress in your Render dashboard.
 
 ### Google Cloud Run
 

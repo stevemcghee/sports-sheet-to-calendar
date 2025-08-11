@@ -309,9 +309,7 @@
         // Handle sync trigger
         document.getElementById('trigger-sync').addEventListener('click', async () => {
             try {
-                const response = await fetch('/trigger_sync', {
-                    method: 'POST'
-                });
+                const response = await fetch('/trigger_sync');
                 const data = await response.json();
                 
                 if (data.success) {

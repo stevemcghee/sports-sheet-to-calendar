@@ -398,7 +398,7 @@ def apply_changes():
 
 import subprocess
 
-@app.route('/trigger_sync', methods=['POST'])
+@app.route('/trigger_sync', methods=['GET', 'POST'])
 def trigger_sync():
     try:
         # Get the absolute path to the automated_sync.py script
