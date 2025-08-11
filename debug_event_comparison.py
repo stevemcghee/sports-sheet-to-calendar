@@ -9,10 +9,98 @@ import logging
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+import re
 from calendar_sync import (
     get_google_credentials, get_spreadsheet_data, parse_sports_events,
-    create_or_get_sports_calendar, get_existing_events, get_event_key, events_are_equal
+    create_or_get_sports_calendar, get_existing_events
 )
+
+def get_event_key(event):
+    """Generate a unique key for an event based on its start/end times and summary."""
+    start = event.get('start', {})
+    summary = event.get('summary', '')
+    
+    # Get start time/date
+    if 'dateTime' in start:
+        # For datetime events, keep the full datetime string
+        start_str = start['dateTime'].split('T')[0]
+    elif 'date' in start:
+        start_str = start['date']
+    else:
+        return None
+        
+    return f"{start_str}_{summary}"
+
+def events_are_equal(event1, event2):
+    """Compare two events for equality, ignoring timezone differences and handling missing fields."""
+    # Compare summaries (ignoring whitespace)
+    summary1 = event1.get('summary', '').strip()
+    summary2 = event2.get('summary', '').strip()
+    if summary1 != summary2:
+        return False
+        
+    # Compare start times
+    start1 = event1.get('start', {})
+    start2 = event2.get('start', {})
+    
+    # Handle datetime vs date comparison
+    if ('dateTime' in start1 and 'date' in start2) or ('date' in start1 and 'dateTime' in start2):
+        date1 = start1.get('date') or start1['dateTime'].split('T')[0]
+        date2 = start2.get('date') or start2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+    elif 'dateTime' in start1 and 'dateTime' in start2:
+        # Strip timezone for comparison
+        date1 = re.sub(r'[+-]\d{2}:\d{2}$', '', start1['dateTime'])
+        date2 = re.sub(r'[+-]\d{2}:\d{2}$', '', start2['dateTime'])
+        if date1 != date2:
+            return False
+    elif 'date' in start1 and 'date' in start2:
+        if start1['date'] != start2['date']:
+            return False
+    else:
+        # One is date and one is datetime - compare just the date portion
+        date1 = start1.get('date') or start1['dateTime'].split('T')[0]
+        date2 = start2.get('date') or start2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+        
+    # Compare end times
+    end1 = event1.get('end', {})
+    end2 = event2.get('end', {})
+    
+    # Handle datetime vs date comparison
+    if ('dateTime' in end1 and 'date' in end2) or ('date' in end1 and 'dateTime' in end2):
+        date1 = end1.get('date') or end1['dateTime'].split('T')[0]
+        date2 = end2.get('date') or end2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+    elif 'dateTime' in end1 and 'dateTime' in end2:
+        # Strip timezone for comparison
+        date1 = re.sub(r'[+-]\d{2}:\d{2}$', '', end1['dateTime'])
+        date2 = re.sub(r'[+-]\d{2}:\d{2}$', '', end2['dateTime'])
+        if date1 != date2:
+            return False
+    elif 'date' in end1 and 'date' in end2:
+        if end1['date'] != end2['date']:
+            return False
+    else:
+        # One is date and one is datetime - compare just the date portion
+        date1 = end1.get('date') or end1['dateTime'].split('T')[0]
+        date2 = end2.get('date') or end2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+        
+    # Compare descriptions (ignoring whitespace and timezone info)
+    # Handle None descriptions as empty strings
+    desc1 = (event1.get('description') or '').strip()
+    desc2 = (event2.get('description') or '').strip()
+    
+    # Clean up descriptions by removing timezone info and whitespace
+    desc1 = re.sub(r'[+-]\d{2}:\d{2}', '', desc1).strip()
+    desc2 = re.sub(r'[+-]\d{2}:\d{2}', '', desc2).strip()
+    
+    return desc1 == desc2
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -86,4 +174,4 @@ def debug_event_comparison():
                 print(f"       Summary: {existing_event.get('summary')}")
 
 if __name__ == "__main__":
-    debug_event_comparison() 
+    debug_event_comparison()

@@ -467,6 +467,14 @@ def parse_sports_events(data, sheet_name=None):
             bus = row[bus_idx] if bus_idx is not None and len(row) > bus_idx else ""
             vans = row[vans_idx] if vans_idx is not None and len(row) > vans_idx else ""
             
+            # Consolidate transportation fields
+            if bus and bus.strip() and vans and vans.strip():
+                transportation = f"Bus: {bus}, Vans: {vans}"
+            elif bus and bus.strip():
+                transportation = bus
+            elif vans and vans.strip():
+                transportation = vans
+
             logger.debug(f"Row {i+data_start_row+1}: Date='{date_str}', Event='{event}', Location='{location}', Time='{time_str}'")
             logger.debug(f"Additional fields: Transportation='{transportation}', Release='{release_time}', Departure='{departure_time}', Attire='{attire}', Notes='{notes}', Bus='{bus}', Vans='{vans}'")
             
@@ -521,10 +529,6 @@ def parse_sports_events(data, sheet_name=None):
                     description_parts.append(f"Attire: {attire}")
                 if notes and notes.strip():
                     description_parts.append(f"Notes: {notes}")
-                if bus and bus.strip():
-                    description_parts.append(f"Bus: {bus}")
-                if vans and vans.strip():
-                    description_parts.append(f"Vans: {vans}")
                 
                 description = "\n".join(description_parts)
                 
@@ -532,13 +536,16 @@ def parse_sports_events(data, sheet_name=None):
                     "summary": f"{sport_name} - {event} at {location}",
                     "description": description,
                     "location": location,
-                    "start": {
-                        "date": start_date.strftime("%Y-%m-%d")
-                    },
-                    "end": {
-                        "date": end_date_for_calendar.strftime("%Y-%m-%d")
-                    }
                 }
+
+                if parsed_time:
+                    start_datetime = datetime.combine(start_date, parsed_time)
+                    end_datetime = start_datetime + timedelta(hours=2)
+                    event_dict["start"] = {"dateTime": start_datetime.isoformat(), "timeZone": "America/Los_Angeles"}
+                    event_dict["end"] = {"dateTime": end_datetime.isoformat(), "timeZone": "America/Los_Angeles"}
+                else:
+                    event_dict["start"] = {"date": start_date.strftime("%Y-%m-%d")}
+                    event_dict["end"] = {"date": end_date_for_calendar.strftime("%Y-%m-%d")}
                 
                 # Add custom fields for additional data (these will be stored in the event but may not display in all calendar views)
                 if transportation and transportation.strip():
@@ -551,10 +558,6 @@ def parse_sports_events(data, sheet_name=None):
                     event_dict["attire"] = attire
                 if notes and notes.strip():
                     event_dict["notes"] = notes
-                if bus and bus.strip():
-                    event_dict["bus"] = bus
-                if vans and vans.strip():
-                    event_dict["vans"] = vans
                 events.append(event_dict)
                 logger.debug(f"Successfully created event: {event_dict['summary']}")
             except Exception as e:
@@ -896,28 +899,18 @@ def fix_event_times(event):
 def get_event_key(event):
     """Generate a unique key for an event based on its start/end times and summary."""
     start = event.get('start', {})
-    end = event.get('end', {})
     summary = event.get('summary', '')
     
     # Get start time/date
     if 'dateTime' in start:
         # For datetime events, keep the full datetime string
-        start_str = start['dateTime']
+        start_str = start['dateTime'].split('T')[0]
     elif 'date' in start:
         start_str = start['date']
     else:
         return None
         
-    # Get end time/date
-    if 'dateTime' in end:
-        # For datetime events, keep the full datetime string
-        end_str = end['dateTime']
-    elif 'date' in end:
-        end_str = end['date']
-    else:
-        return None
-        
-    return f"{start_str}_{end_str}_{summary}"
+    return f"{start_str}_{summary}"
 
 def events_are_equal(event1, event2):
     """Compare two events for equality, ignoring timezone differences and handling missing fields."""
@@ -932,10 +925,15 @@ def events_are_equal(event1, event2):
     start2 = event2.get('start', {})
     
     # Handle datetime vs date comparison
-    if 'dateTime' in start1 and 'dateTime' in start2:
+    if ('dateTime' in start1 and 'date' in start2) or ('date' in start1 and 'dateTime' in start2):
+        date1 = start1.get('date') or start1['dateTime'].split('T')[0]
+        date2 = start2.get('date') or start2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+    elif 'dateTime' in start1 and 'dateTime' in start2:
         # Strip timezone for comparison
-        date1 = re.sub(r'[+-]\d{2}:\d{2}$', '', start1['dateTime'])
-        date2 = re.sub(r'[+-]\d{2}:\d{2}$', '', start2['dateTime'])
+        date1 = re.sub(r'[+-]\d{2}:\d{2}', '', start1['dateTime'])
+        date2 = re.sub(r'[+-]\d{2}:\d{2}', '', start2['dateTime'])
         if date1 != date2:
             return False
     elif 'date' in start1 and 'date' in start2:
@@ -953,10 +951,15 @@ def events_are_equal(event1, event2):
     end2 = event2.get('end', {})
     
     # Handle datetime vs date comparison
-    if 'dateTime' in end1 and 'dateTime' in end2:
+    if ('dateTime' in end1 and 'date' in end2) or ('date' in end1 and 'dateTime' in end2):
+        date1 = end1.get('date') or end1['dateTime'].split('T')[0]
+        date2 = end2.get('date') or end2['dateTime'].split('T')[0]
+        if date1 != date2:
+            return False
+    elif 'dateTime' in end1 and 'dateTime' in end2:
         # Strip timezone for comparison
-        date1 = re.sub(r'[+-]\d{2}:\d{2}$', '', end1['dateTime'])
-        date2 = re.sub(r'[+-]\d{2}:\d{2}$', '', end2['dateTime'])
+        date1 = re.sub(r'[+-]\d{2}:\d{2}', '', end1['dateTime'])
+        date2 = re.sub(r'[+-]\d{2}:\d{2}', '', end2['dateTime'])
         if date1 != date2:
             return False
     elif 'date' in end1 and 'date' in end2:
@@ -1247,4 +1250,4 @@ def update_calendar(service, events, calendar_id, return_detailed_changes: bool 
         raise
 
 if __name__ == '__main__':
-    main() 
+    main()
