@@ -1327,46 +1327,46 @@ def get_current_calendar():
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/trigger-sync', methods=['POST'])
+
+
+import subprocess
+
+@app.route('/routes')
+def list_routes():
+    import urllib
+    output = []
+    for rule in app.url_map.iter_rules():
+        options = {}
+        for arg in rule.arguments:
+            options[arg] = "[{0}]".format(arg)
+
+        methods = ','.join(rule.methods)
+        url = urllib.parse.unquote(url_for(rule.endpoint, **options))
+        line = "{:50s} {:20s} {}".format(rule.endpoint, methods, url)
+        output.append(line)
+
+    return "<pre>" + "\n".join(sorted(output)) + "</pre>"
+
+@app.route('/trigger-sync', methods=['GET', 'POST'])
 def trigger_sync():
-    """Trigger the automated sync process from scheduler."""
     try:
-        logger.info("Automated sync triggered by scheduler")
+        if 'credentials' not in session:
+            return jsonify({'success': False, 'error': 'Not authenticated', 'needs_auth': True}), 401
+        # Get the absolute path to the automated_sync.py script
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'automated_sync.py'))
         
-        # Import the automated sync function
-        from automated_sync import main as run_automated_sync
+        # Get the python executable path from the sys module
+        python_executable = sys.executable
+
+        # Start the sync script as a background process
+        subprocess.Popen([python_executable, script_path])
         
-        # Run the sync
-        success = run_automated_sync()
-        
-        if success:
-            logger.info("Automated sync completed successfully")
-            return jsonify({
-                'success': True,
-                'message': 'Sync completed successfully',
-                'timestamp': datetime.now().isoformat()
-            })
-        else:
-            logger.error("Automated sync failed")
-            return jsonify({
-                'success': False,
-                'message': 'Sync failed',
-                'timestamp': datetime.now().isoformat()
-            }), 500
-            
+        return jsonify({'success': True, 'message': 'Sync triggered successfully!'})
     except Exception as e:
-        logger.error(f"Error in trigger_sync: {str(e)}")
+        logger.error(f"Error triggering sync: {str(e)}")
         logger.error(traceback.format_exc())
-        try:
-            from automated_sync import send_failure_email
-            send_failure_email("/trigger-sync endpoint failure", e)
-        except Exception as notify_err:
-            logger.error(f"Failed to send failure email from trigger_sync: {notify_err}")
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True) 

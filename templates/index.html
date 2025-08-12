@@ -5,2558 +5,321 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SLOHS Sports Calendar Sync</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        .sheet-preview {
-            height: 400px;
-            border: 1px solid #ddd;
-            margin-bottom: 20px;
-            overflow: auto;
-        }
-        .changes-preview {
-            max-height: 400px;
-            overflow-y: auto;
-        }
         .event-card {
-            margin-bottom: 10px;
-            word-break: break-word;
+            margin-bottom: 1rem;
+            border-left: 4px solid #0d6efd;
         }
-        .event-card .card-body {
-            padding: 10px;
+        .sheet-tabs {
+            margin-bottom: 1rem;
         }
-        .event-card .card-text {
-            margin-bottom: 0;
-        }
-        .create-event {
-            border-left: 4px solid #28a745;
-        }
-        .update-event {
-            border-left: 4px solid #ffc107;
-        }
-        .delete-event {
-            border-left: 4px solid #dc3545;
-        }
-        #sheetSelect {
-            display: none;
-        }
-        .table-responsive {
-            max-height: 380px;
-            overflow-y: auto;
-        }
-        .table td, .table th {
-            white-space: normal;
-            word-break: break-word;
-        }
-        #authModal .modal-body {
-            text-align: center;
-        }
-        #authModal .modal-body iframe {
-            width: 100%;
-            height: 500px;
-            border: none;
-        }
-        .loading-spinner {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        .loading-spinner .spinner-border {
-            width: 3rem;
-            height: 3rem;
-        }
-        .loading-text {
-            margin-top: 10px;
-            color: #666;
-        }
-        .no-data-message {
-            display: none;
-        }
-        .gemini-progress {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.8);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .gemini-progress-content {
-            text-align: center;
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        .gemini-progress .spinner-border {
-            width: 4rem;
-            height: 4rem;
-            color: #0d6efd;
-        }
-        .gemini-progress-text {
-            margin-top: 15px;
-            font-size: 1.2rem;
-            color: #333;
-        }
-        
-        /* Debug Log Styles */
-        .debug-log-container {
-            max-height: 300px;
-            overflow-y: auto;
+        .sheet-tab {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
             border: 1px solid #dee2e6;
-            border-radius: 0.375rem;
-            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+            margin-right: 0.5rem;
         }
-        
-        .debug-log {
-            padding: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-        
-        .log-entry {
-            margin-bottom: 4px;
-            word-wrap: break-word;
-        }
-        
-        .log-timestamp {
-            color: #6c757d;
-            font-weight: bold;
-        }
-        
-        .log-level {
-            display: inline-block;
-            width: 50px;
-            text-align: center;
-            font-weight: bold;
-            border-radius: 3px;
-            margin: 0 8px;
-        }
-        
-        .log-info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-        }
-        
-        .log-success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        
-        .log-warning {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        
-        .log-error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
-        .log-debug {
-            background-color: #e2e3e5;
-            color: #383d41;
-        }
-        
-        .log-message {
-            color: #212529;
-        }
-        
-        .debug-log-container.collapsed {
-            max-height: 50px;
-            overflow: hidden;
-        }
-        
-        /* Enhanced log structure styles */
-        .log-entry {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 6px;
-            padding: 4px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        
-        .log-timestamp {
-            color: #6c757d;
-            font-weight: bold;
-            min-width: 80px;
-            font-size: 11px;
-        }
-        
-        .log-level {
-            display: inline-block;
-            width: 60px;
-            text-align: center;
-            font-weight: bold;
-            border-radius: 3px;
-            margin: 0 8px;
-            font-size: 10px;
-            padding: 2px 4px;
-        }
-        
-        .log-message {
-            color: #212529;
-            flex: 1;
-            word-wrap: break-word;
-            line-height: 1.4;
-        }
-        
-        .server-log-entry {
-            background-color: #f8f9fa;
-            border-left: 3px solid #dee2e6;
-            padding-left: 8px;
-            margin-left: 10px;
-        }
-        
-        .log-prefix {
-            color: #6c757d;
-            font-family: monospace;
-            margin-right: 4px;
-        }
-        
-        .log-content {
-            color: #212529;
-        }
-        
-        /* Tree structure for server logs */
-        .server-log-entry .log-message {
-            font-family: 'Courier New', monospace;
-            font-size: 11px;
-        }
-        
-        /* JSON response styling */
-        .json-response {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 8px;
-            margin: 4px 0;
-            font-family: 'Courier New', monospace;
-            font-size: 10px;
-            line-height: 1.3;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        /* Progress tracking styles */
-        .progress-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            z-index: 9999;
-            display: none;
-        }
-        
-        .progress-modal {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            min-width: 500px;
-            max-width: 80%;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-        
-        .progress-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .progress-title {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        
-        .progress-subtitle {
-            color: #666;
-            font-size: 0.9rem;
-        }
-        
-        .progress-bar-container {
-            margin: 20px 0;
-        }
-        
-        .progress-bar {
-            height: 25px;
-            border-radius: 12px;
-            background-color: #e9ecef;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #007bff, #0056b3);
-            transition: width 0.3s ease;
-            border-radius: 12px;
-        }
-        
-        .progress-text {
-            text-align: center;
-            margin-top: 10px;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .progress-details {
-            margin-top: 20px;
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            background-color: #f8f9fa;
-        }
-        
-        .progress-step {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-            padding: 5px;
-            border-radius: 3px;
-        }
-        
-        .progress-step.completed {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        
-        .progress-step.current {
-            background-color: #cce5ff;
-            color: #004085;
-        }
-        
-        .progress-step.pending {
-            background-color: #f8f9fa;
-            color: #6c757d;
-        }
-        
-        .progress-step-icon {
-            margin-right: 10px;
-            font-size: 1.1rem;
-        }
-        
-        .progress-step-text {
-            flex: 1;
-        }
-        
-        .progress-step-count {
-            font-weight: bold;
-            margin-left: 10px;
-        }
-        
-        .progress-cancel-btn {
-            margin-top: 20px;
-            text-align: center;
-        }
-        
-        .json-key {
-            color: #0066cc;
-            font-weight: bold;
-        }
-        
-        .json-string {
-            color: #008800;
-        }
-        
-        .json-number {
-            color: #cc6600;
-        }
-        
-        .json-boolean {
-            color: #cc0066;
-        }
-        
-        .json-null {
-            color: #999999;
-        }
-        
-        .json-bracket {
-            color: #666666;
-        }
-        
-        .json-indent {
-            display: inline-block;
-            white-space: pre;
-            font-family: 'Courier New', monospace;
+        .sheet-tab.active {
+            background-color: #0d6efd;
+            color: white;
         }
     </style>
 </head>
 <body>
-    <!-- Gemini Progress Overlay -->
-    <div class="gemini-progress" id="geminiProgress">
-        <div class="gemini-progress-content">
-            <div class="spinner-border" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <div class="gemini-progress-text">Processing with Gemini AI...</div>
-        </div>
-    </div>
-
-    <div class="container py-4">
+    <div class="container mt-4">
         <h1 class="mb-4">SLOHS Sports Calendar Sync</h1>
         
-        <!-- Authentication Status -->
-        <div class="card mb-4">
+        <!-- Authentication Section -->
+        <div id="auth-section" class="card mb-4">
             <div class="card-body">
-                <h5 class="card-title">Authentication Status</h5>
+                <h5 class="card-title">Google Authentication</h5>
                 <div class="alert alert-info mb-3">
                     <i class="bi bi-info-circle"></i>
                     <strong>Important:</strong> Log into the Google account you wish to use for hosting the calendars. Don't use your personal account!
                 </div>
-                <div id="logoutSection" class="mt-2" style="display: none;">
+                <button id="auth-button" class="btn btn-primary">Authenticate with Google</button>
+                <div id="auth-status" class="mt-2" style="display: none;"></div>
+                <div id="logout-section" class="mt-2" style="display: none;">
                     <div class="d-flex justify-content-between align-items-center">
-                        <div id="authStatus"></div>
-                        <button id="logoutButton" class="btn btn-outline-danger">
+                        <p class="text-success mb-0">Authenticated with Google</p>
+                        <button id="logout-button" class="btn btn-outline-danger">
                             <i class="bi bi-box-arrow-right"></i>
                             Log Out
                         </button>
                     </div>
                 </div>
-                <div id="authError" class="alert alert-danger mt-2" style="display: none;"></div>
-
-                <button id="authButton" class="btn btn-primary mt-2" style="display: none;">
-                    Authenticate with Google
-                </button>
             </div>
         </div>
 
-        <!-- Input Form -->
-        <div class="card mb-4">
+        <!-- Spreadsheet Input Section -->
+        <div id="spreadsheet-section" class="card mb-4" style="display: none;">
             <div class="card-body">
-                <h5 class="card-title">Load Spreadsheet</h5>
-                <div id="spreadsheetInfo" class="alert alert-info mb-3" style="display: none;">
-                    <strong>Current Spreadsheet:</strong> <span id="spreadsheetTitle"></span>
-                    <div class="fw-bold mb-2" id="individualCalendarsLabel" style="font-size: 1.1rem;">Generate Individual Sports Calendars</div>
-                    <div id="sheetTabs" class="mt-2" style="display: none;">
-                        <div class="btn-group" role="group" aria-label="Sheet tabs">
-                            <!-- Tabs will be added here dynamically -->
-                        </div>
-                    </div>
-                </div>
-                <form id="loadForm">
-                    <div class="mb-3">
-                        <label for="spreadsheetId" class="form-label">Spreadsheet ID</label>
-                        <input type="text" class="form-control" id="spreadsheetId" value="1DiA6HTQjDiPzEua_kxcw175C-uMWGnIq_PAKICbiMzQ" required>
-                        <div class="form-text">Default spreadsheet ID loaded</div>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary">Load Sheet</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Sheet Preview -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">Sheet Preview</h5>
-                <div id="currentSheetName" class="mb-2 fw-bold text-primary" style="font-size: 1.1rem;"></div>
-                <div id="sheetPreview" class="sheet-preview">
-                    <div class="loading-spinner">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <div class="loading-text">Loading events...</div>
-                    </div>
-                    <div class="no-data-message">
-                        <div class="d-flex align-items-center justify-content-center h-100">
-                            <p class="text-muted">Load a spreadsheet to see preview</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Changes Preview -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">Proposed Changes</h5>
-                <div id="changesPreview" class="changes-preview">
-                    <div class="d-flex align-items-center justify-content-center h-100">
-                        <p class="text-muted">Load a spreadsheet and click 'Preview Changes' to see proposed changes</p>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <button id="previewChangesBtn" class="btn btn-secondary" disabled>Preview Changes</button>
-                    <button id="applyChangesBtn" class="btn btn-success" disabled>Apply Changes</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Calendar Preview -->
-        <div class="card mb-4">
-            <div class="card-body">
-                <h5 class="card-title">Calendar Preview</h5>
+                <h5 class="card-title">Spreadsheet Information</h5>
                 <div class="mb-3">
-                    <button id="loadCurrentCalendarBtn" class="btn btn-outline-primary btn-sm" disabled>
-                        <i class="bi bi-calendar-check"></i> Load Current Calendar
-                    </button>
+                    <label for="spreadsheet-id" class="form-label">Spreadsheet ID</label>
+                    <input type="text" class="form-control" id="spreadsheet-id" placeholder="Enter spreadsheet ID">
                 </div>
-                <div id="calendarPreview">
-                    <div class="d-flex align-items-center justify-content-center h-100">
-                        <p class="text-muted">Click "Load Current Calendar" to see current calendar events</p>
-                    </div>
-                </div>
+                <button id="load-sheet" class="btn btn-primary">Load Sheet</button>
+                <button id="trigger-sync" class="btn btn-secondary">Trigger Sync</button>
             </div>
         </div>
 
-        <!-- SLOHS Calendar Index -->
-        <div class="card mb-4">
+        <!-- Sheet Selection -->
+        <div id="sheet-selection" class="card mb-4" style="display: none;">
             <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-calendar3"></i>
-                    Your SLOHS Calendars
-                </h5>
-                <p class="text-muted">All calendars created by this system that start with "SLOHS"</p>
-                <div id="calendarIndex">
-                    <div class="d-flex align-items-center justify-content-center h-100">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <span class="ms-2">Loading calendars...</span>
-                    </div>
-                </div>
+                <h5 class="card-title">Select Sheet</h5>
+                <div id="sheet-tabs" class="sheet-tabs"></div>
             </div>
         </div>
 
-        <!-- Debug Log Pane -->
-        <div class="card">
+        <!-- Events Preview -->
+        <div id="events-section" class="card mb-4" style="display: none;">
             <div class="card-body">
-                <!-- Add filter dropdown above debug log -->
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h5 class="card-title mb-0">Debug Log</h5>
-                    <div>
-                        <label for="logLevelFilter" class="form-label me-2 mb-0">Log Level:</label>
-                        <select id="logLevelFilter" class="form-select form-select-sm d-inline-block w-auto me-2">
-                            <option value="ALL">ALL</option>
-                            <option value="DEBUG">DEBUG</option>
-                            <option value="INFO">INFO</option>
-                            <option value="WARNING">WARNING</option>
-                            <option value="ERROR">ERROR</option>
-                        </select>
-                        <button id="clearLogBtn" class="btn btn-sm btn-outline-secondary me-2">Clear Log</button>
-                        <button id="toggleLogBtn" class="btn btn-sm btn-outline-primary">Collapse</button>
+                <h5 class="card-title">Events Preview</h5>
+                <div id="events-container"></div>
+                <div class="mt-3">
+                    <div class="mb-3">
+                        <label for="calendar-name" class="form-label">Calendar Name</label>
+                        <input type="text" class="form-control" id="calendar-name" value="SLOHS Sports Calendar">
                     </div>
-                </div>
-                <div id="debugLogContainer" class="debug-log-container">
-                    <div id="debugLog" class="debug-log">
-                        <div class="log-entry">
-                            <span class="log-timestamp">[<span id="currentTime"></span>]</span>
-                            <span class="log-level log-info">INFO</span>
-                            <span class="log-message">Debug log initialized. Ready to capture events.</span>
-                        </div>
-                    </div>
+                    <button id="apply-changes" class="btn btn-success">Apply to Calendar</button>
                 </div>
             </div>
         </div>
+
+        <!-- Status Messages -->
+        <div id="status-messages" class="alert" style="display: none;"></div>
     </div>
 
-    <!-- Progress Overlay -->
-    <div class="progress-overlay" id="progressOverlay">
-        <div class="progress-modal">
-            <div class="progress-header">
-                <div class="progress-title">Generating All Calendars</div>
-                <div class="progress-subtitle">This may take several minutes...</div>
-            </div>
-            
-            <div class="progress-bar-container">
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-                </div>
-                <div class="progress-text" id="progressText">0% Complete</div>
-            </div>
-            
-            <div class="progress-details" id="progressDetails">
-                <div class="progress-step pending">
-                    <div class="progress-step-icon">⏳</div>
-                    <div class="progress-step-text">Initializing...</div>
-                </div>
-            </div>
-            
-            <div class="progress-cancel-btn">
-                <button type="button" class="btn btn-outline-danger" id="cancelProgressBtn">
-                    <i class="bi bi-x-circle"></i> Cancel Operation
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Authentication Modal -->
-    <div class="modal fade" id="authModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Google Authentication</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <iframe id="authFrame" src=""></iframe>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const loadForm = document.getElementById('loadForm');
-            const previewChangesBtn = document.getElementById('previewChangesBtn');
-            const applyChangesBtn = document.getElementById('applyChangesBtn');
-            const sheetPreview = document.getElementById('sheetPreview');
-            const changesPreview = document.getElementById('changesPreview');
-            const calendarPreview = document.getElementById('calendarPreview');
-            const sheetTabs = document.getElementById('sheetTabs');
-            const authButton = document.getElementById('authButton');
-            const authStatus = document.getElementById('authStatus');
-            const authModal = new bootstrap.Modal(document.getElementById('authModal'));
-            const authFrame = document.getElementById('authFrame');
-            const debugLog = document.getElementById('debugLog');
-            const clearLogBtn = document.getElementById('clearLogBtn');
-            const toggleLogBtn = document.getElementById('toggleLogBtn');
-            const debugLogContainer = document.getElementById('debugLogContainer');
+        let currentSheet = null;
+        let currentEvents = [];
 
-            // Debug logging functions
-            function log(level, message) {
-                logWithJSON(level, message);
-            }
-
-            function logInfo(message) { log('info', message); }
-            function logSuccess(message) { log('success', message); }
-            function logWarning(message) { log('warning', message); }
-            function logError(message) { log('error', message); }
-            function logDebug(message) { log('debug', message); }
-
-            // Helper functions to parse server logs
-            function parseLogLevel(logEntry) {
-                // Server logs are in format: "2025-01-08 16:30:45,123 - INFO - message"
-                const match = logEntry.match(/\s-\s(\w+)\s-/);
-                return match ? match[1] : 'DEBUG';
-            }
-
-            function extractLogMessage(logEntry) {
-                // Extract the message part after the log level
-                const match = logEntry.match(/\s-\s\w+\s-\s(.+)/);
-                return match ? match[1] : logEntry;
-            }
-
-            // Enhanced server log rendering with JSON structure
-            function renderServerLogs(logs) {
-                if (!logs || logs.length === 0) return;
+        // Handle authentication
+        document.getElementById('auth-button').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/auth');
+                const data = await response.json();
                 
-                logInfo(`📋 Server logs (${logs.length} entries):`);
-                logInfo('┌─────────────────────────────────────────────────────────────────');
+                if (data.success) {
+                    const authWindow = window.open(data.auth_url, 'auth', 'width=600,height=600');
+                    
+                    window.addEventListener('message', (event) => {
+                        if (event.data === 'auth_complete') {
+                            document.getElementById('auth-section').style.display = 'none';
+                            document.getElementById('spreadsheet-section').style.display = 'block';
+                            document.getElementById('logout-section').style.display = 'block';
+                            showStatus('Authentication successful!', 'success');
+                        } else if (event.data === 'auth_error') {
+                            showStatus('Authentication failed. Please try again.', 'danger');
+                        }
+                    });
+                } else {
+                    showStatus(data.error, 'danger');
+                }
+            } catch (error) {
+                showStatus('Error during authentication: ' + error.message, 'danger');
+            }
+        });
+
+        // Handle logout
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/logout');
+                const data = await response.json();
                 
-                logs.forEach((log, index) => {
-                    const logLevel = parseLogLevel(log);
-                    const logMessage = extractLogMessage(log);
-                    const isLast = index === logs.length - 1;
-                    const prefix = isLast ? '└─ ' : '├─ ';
-                    
-                    // Check if this log message contains JSON
-                    const formattedMessage = formatJSONResponse(logMessage);
-                    const isJSON = formattedMessage !== logMessage;
-                    
-                    const logEntry = document.createElement('div');
-                    logEntry.className = 'log-entry server-log-entry';
-                    
-                    if (isJSON) {
-                        logEntry.innerHTML = `
-                            <div class="log-timestamp">[${new Date().toLocaleTimeString()}]</div>
-                            <div class="log-level log-${logLevel.toLowerCase()}">${logLevel}</div>
-                            <div class="log-message">
-                                <span class="log-prefix">${prefix}</span>
-                                <div class="json-response">${formattedMessage}</div>
-                            </div>
-                        `;
-                    } else {
-                        logEntry.innerHTML = `
-                            <div class="log-timestamp">[${new Date().toLocaleTimeString()}]</div>
-                            <div class="log-level log-${logLevel.toLowerCase()}">${logLevel}</div>
-                            <div class="log-message">
-                                <span class="log-prefix">${prefix}</span>
-                                <span class="log-content">${logMessage}</span>
-                            </div>
-                        `;
-                    }
-                    debugLog.appendChild(logEntry);
+                if (data.success) {
+                    document.getElementById('auth-section').style.display = 'block';
+                    document.getElementById('spreadsheet-section').style.display = 'none';
+                    document.getElementById('sheet-selection').style.display = 'none';
+                    document.getElementById('events-section').style.display = 'none';
+                    document.getElementById('logout-section').style.display = 'none';
+                    showStatus('Logged out successfully!', 'success');
+                } else {
+                    showStatus('Logout failed: ' + data.error, 'danger');
+                }
+            } catch (error) {
+                showStatus('Error during logout: ' + error.message, 'danger');
+            }
+        });
+
+        // Handle sheet loading
+        document.getElementById('load-sheet').addEventListener('click', async () => {
+            const spreadsheetId = document.getElementById('spreadsheet-id').value.trim();
+            if (!spreadsheetId) {
+                showStatus('Please enter a spreadsheet ID', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/load_sheet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ spreadsheet_id: spreadsheetId })
                 });
+
+                const data = await response.json();
                 
-                logInfo('└─────────────────────────────────────────────────────────────────');
-                debugLog.scrollTop = debugLog.scrollHeight;
-            }
-            
-            // Format JSON responses with syntax highlighting
-            function formatJSONResponse(message) {
-                try {
-                    // First, try to parse the entire message as JSON
-                    const jsonObj = JSON.parse(message);
-                    return formatJSON(jsonObj, 0);
-                } catch (e) {
-                    // If that fails, try to extract JSON from within the message
-                    if (message.includes('{') && message.includes('}')) {
-                        const jsonMatch = message.match(/\{.*\}/s);
-                        if (jsonMatch) {
-                            try {
-                                const jsonStr = jsonMatch[0];
-                                const jsonObj = JSON.parse(jsonStr);
-                                return formatJSON(jsonObj, 0);
-                            } catch (e2) {
-                                return message;
-                            }
-                        }
+                if (data.success) {
+                    if (data.sheets && data.sheets.length > 0) {
+                        displaySheetTabs(data.sheets);
+                        document.getElementById('sheet-selection').style.display = 'block';
+                        loadSheetData(spreadsheetId, data.sheets[0]);
+                    } else {
+                        showStatus('No sheets found in the spreadsheet', 'warning');
                     }
-                    return message;
-                }
-            }
-            
-            function formatJSON(obj, indent = 0) {
-                const spaces = '  '.repeat(indent);
-                const indentSpaces = '  '.repeat(indent + 1);
-                
-                if (obj === null) {
-                    return `<span class="json-null">null</span>`;
-                }
-                if (typeof obj === 'boolean') {
-                    return `<span class="json-boolean">${obj}</span>`;
-                }
-                if (typeof obj === 'number') {
-                    return `<span class="json-number">${obj}</span>`;
-                }
-                if (typeof obj === 'string') {
-                    return `<span class="json-string">"${obj}"</span>`;
-                }
-                if (Array.isArray(obj)) {
-                    if (obj.length === 0) {
-                        return `<span class="json-bracket">[]</span>`;
-                    }
-                    let result = `<span class="json-bracket">[</span><br>`;
-                    obj.forEach((item, index) => {
-                        result += `<span class="json-indent">${indentSpaces}</span>${formatJSON(item, indent + 1)}`;
-                        if (index < obj.length - 1) result += ',';
-                        result += '<br>';
-                    });
-                    result += `<span class="json-indent">${spaces}</span><span class="json-bracket">]</span>`;
-                    return result;
-                }
-                if (typeof obj === 'object') {
-                    const keys = Object.keys(obj);
-                    if (keys.length === 0) {
-                        return `<span class="json-bracket">{}</span>`;
-                    }
-                    let result = `<span class="json-bracket">{</span><br>`;
-                    keys.forEach((key, index) => {
-                        result += `<span class="json-indent">${indentSpaces}</span><span class="json-key">"${key}"</span>: ${formatJSON(obj[key], indent + 1)}`;
-                        if (index < keys.length - 1) result += ',';
-                        result += '<br>';
-                    });
-                    result += `<span class="json-indent">${spaces}</span><span class="json-bracket">}</span>`;
-                    return result;
-                }
-                return obj;
-            }
-            
-            // Progress tracking variables
-            let progressCancelled = false;
-            let progressSteps = [];
-            let currentStep = 0;
-            
-            // Progress tracking functions
-            function showProgress() {
-                document.getElementById('progressOverlay').style.display = 'block';
-                progressCancelled = false;
-                currentStep = 0;
-                updateProgress(0, 'Initializing...');
-            }
-            
-            function hideProgress() {
-                document.getElementById('progressOverlay').style.display = 'none';
-            }
-            
-            function updateProgress(percentage, message) {
-                const progressFill = document.getElementById('progressFill');
-                const progressText = document.getElementById('progressText');
-                
-                progressFill.style.width = `${percentage}%`;
-                progressText.textContent = `${Math.round(percentage)}% Complete`;
-                
-                // Add message to progress details
-                if (message) {
-                    addProgressStep(message);
-                }
-            }
-            
-            function addProgressStep(message, status = 'current') {
-                const progressDetails = document.getElementById('progressDetails');
-                const stepDiv = document.createElement('div');
-                stepDiv.className = `progress-step ${status}`;
-                
-                let icon = '⏳';
-                if (status === 'completed') icon = '✅';
-                else if (status === 'current') icon = '🔄';
-                else if (status === 'error') icon = '❌';
-                
-                stepDiv.innerHTML = `
-                    <div class="progress-step-icon">${icon}</div>
-                    <div class="progress-step-text">${message}</div>
-                `;
-                
-                progressDetails.appendChild(stepDiv);
-                progressDetails.scrollTop = progressDetails.scrollHeight;
-            }
-            
-            function completeProgressStep(message) {
-                // Update the last step to completed
-                const steps = document.querySelectorAll('.progress-step');
-                if (steps.length > 0) {
-                    const lastStep = steps[steps.length - 1];
-                    lastStep.className = 'progress-step completed';
-                    const icon = lastStep.querySelector('.progress-step-icon');
-                    if (icon) icon.textContent = '✅';
-                }
-                
-                // Add new current step
-                if (message) {
-                    addProgressStep(message, 'current');
-                }
-            }
-            
-            function setProgressError(message) {
-                addProgressStep(message, 'error');
-            }
-            
-            // Enhanced log function to handle JSON responses
-            function logWithJSON(level, message) {
-                const timestamp = new Date().toLocaleTimeString();
-                const logEntry = document.createElement('div');
-                logEntry.className = 'log-entry';
-                
-                // Check if this is a JSON response
-                const isJSONResponse = message.includes('Sheet response received:') || 
-                                     message.includes('Response data:') ||
-                                     message.includes('Auto-load response received:') ||
-                                     (message.trim().startsWith('{') && message.trim().endsWith('}'));
-                
-                if (isJSONResponse) {
-                    const formattedJSON = formatJSONResponse(message);
-                    logEntry.innerHTML = `
-                        <div class="log-timestamp">[${timestamp}]</div>
-                        <div class="log-level log-${level}">${level.toUpperCase()}</div>
-                        <div class="log-message">
-                            <div class="json-response">${formattedJSON}</div>
-                        </div>
-                    `;
                 } else {
-                    logEntry.innerHTML = `
-                        <div class="log-timestamp">[${timestamp}]</div>
-                        <div class="log-level log-${level}">${level.toUpperCase()}</div>
-                        <div class="log-message">${message}</div>
-                    `;
+                    showStatus(data.error, 'danger');
                 }
-                debugLog.appendChild(logEntry);
-                debugLog.scrollTop = debugLog.scrollHeight;
+            } catch (error) {
+                showStatus('Error loading sheet: ' + error.message, 'danger');
             }
+        });
 
-            // Initialize current time display
-            function updateCurrentTime() {
-                const currentTimeEl = document.getElementById('currentTime');
-                if (currentTimeEl) {
-                    currentTimeEl.textContent = new Date().toLocaleTimeString();
-                }
-            }
-            setInterval(updateCurrentTime, 1000);
-            updateCurrentTime();
-
-            // Debug log controls
-            clearLogBtn.addEventListener('click', function() {
-                debugLog.innerHTML = '';
-                logInfo('Debug log cleared');
-            });
-
-            toggleLogBtn.addEventListener('click', function() {
-                const isCollapsed = debugLogContainer.classList.contains('collapsed');
-                if (isCollapsed) {
-                    debugLogContainer.classList.remove('collapsed');
-                    toggleLogBtn.textContent = 'Collapse';
-                } else {
-                    debugLogContainer.classList.add('collapsed');
-                    toggleLogBtn.textContent = 'Expand';
-                }
-            });
-
-            // Check authentication status
-            async function checkAuthStatus() {
-                try {
-                    const response = await fetch('/check_auth');
-                    const data = await response.json();
-                    
-                    if (data.authenticated) {
-                        let statusHtml = '';
-                        if (data.user_email) {
-                            if (data.user_email.includes('Unknown User')) {
-                                statusHtml += `<span class="text-warning">Logged in as <b>${data.user_email}</b></span>`;
-                                statusHtml += `<br><small class="text-muted">Click logout and re-authenticate to see your email</small>`;
-                                statusHtml += `<br><button class="btn btn-sm btn-outline-warning mt-2" onclick="forceReauth()">Force Re-authentication</button>`;
-                            } else {
-                                statusHtml += `<span class="text-primary">Logged in as <b>${data.user_email}</b></span>`;
-                            }
-                        }
-                        authStatus.innerHTML = statusHtml;
-                        authButton.style.display = 'none';
-                        document.getElementById('logoutSection').style.display = 'block';
-                        enableControls();
-                        
-                        // Load SLOHS calendars after successful authentication
-                        loadSLOHSCalendars();
-                        
-                        // Auto-load the default sheet
-                        await autoLoadDefaultSheet();
-                    } else {
-                        logWarning('Not authenticated');
-                        authStatus.innerHTML = '<p class="text-danger">Not authenticated</p>';
-                        authButton.style.display = 'block';
-                        document.getElementById('logoutSection').style.display = 'none';
-                        disableControls();
-                    }
-                } catch (error) {
-                    logError(`Error checking auth status: ${error}`);
-                    authStatus.innerHTML = `<p class="text-danger">Error checking auth status: ${error}</p>`;
-                    authButton.style.display = 'block';
-                    document.getElementById('logoutSection').style.display = 'none';
-                    disableControls();
-                }
-            }
-
-            // Auto-load the default sheet
-            async function autoLoadDefaultSheet() {
-                const spreadsheetId = document.getElementById('spreadsheetId').value;
-                const useTraditionalParser = true; // Always use traditional parser
-                
-                if (!spreadsheetId) {
-                    logWarning('No spreadsheet ID configured - skipping auto-load');
-                    return;
-                }
-                
-                logInfo(`Auto-loading default sheet - Spreadsheet ID: ${spreadsheetId}, Traditional Parser: ${useTraditionalParser}`);
-                
-                try {
-                    logDebug('Sending auto-load request to /load_sheet');
-                    const response = await fetch('/load_sheet', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ 
-                            spreadsheet_id: spreadsheetId,
-                            use_traditional_parser: useTraditionalParser
-                        })
-                    });
-
-                    const data = await response.json();
-                    logDebug(`Auto-load response received: ${JSON.stringify(data)}`);
-                    
-                    if (data.success) {
-                        logSuccess(`Auto-loaded sheet successfully: ${data.spreadsheet_title}`);
-                        // Always update the spreadsheet title
-                        const spreadsheetInfo = document.getElementById('spreadsheetInfo');
-                        const spreadsheetTitleEl = document.getElementById('spreadsheetTitle');
-                        spreadsheetTitleEl.textContent = data.spreadsheet_title;
-                        spreadsheetInfo.style.display = 'block';
-
-                        if (data.sheets) {
-                            logInfo(`Found ${data.sheets.length} sheets: ${data.sheets.join(', ')}`);
-                            // Create tab buttons
-                            sheetTabs.innerHTML = '';
-                            
-                            // Add individual sheet buttons first
-                            data.sheets.forEach((sheet, index) => {
-                                const button = document.createElement('button');
-                                button.type = 'button';
-                                button.className = 'btn btn-outline-primary';
-                                if (index === 0) button.classList.add('active');
-                                button.textContent = sheet;
-                                button.onclick = () => loadSheetData(spreadsheetId, sheet, useTraditionalParser);
-                                sheetTabs.appendChild(button);
-                            });
-                            
-                            // Add All Sports button at the end
-                            const masterButton = document.createElement('button');
-                            masterButton.type = 'button';
-                            masterButton.className = 'btn btn-success';
-                            masterButton.textContent = 'All Sports';
-                            masterButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
-                            sheetTabs.appendChild(masterButton);
-                            
-                            // Create a separate row for the Generate All Calendars button
-                            const generateAllRow = document.createElement('div');
-                            generateAllRow.className = 'row mt-3';
-                            generateAllRow.innerHTML = `
-                                <div class="col-12">
-                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', '${data.sheets.join(',')}', ${useTraditionalParser})">
-                                        <i class="bi bi-calendar-plus"></i>
-                                        Generate All Calendars
-                                    </button>
-                                </div>
-                            `;
-                            
-                            // Insert the new row after the sheet tabs
-                            sheetTabs.parentNode.insertBefore(generateAllRow, sheetTabs.nextSibling);
-                            
-                            sheetTabs.style.display = 'block';
-                            
-                            // Load first sheet by default
-                            if (data.sheets.length > 0) {
-                                setCurrentSheetName(data.sheets[0]);
-                                logInfo(`Auto-loading first sheet: ${data.sheets[0]}`);
-                                loadSheetData(spreadsheetId, data.sheets[0], useTraditionalParser);
-                            }
-                        } else {
-                            logWarning('No sheets found in spreadsheet');
-                            sheetTabs.style.display = 'none';
-                        }
-                    } else {
-                        logError(`Error auto-loading sheet: ${data.error}`);
-                        // Don't show alert for auto-load errors, just log them
-                    }
-                } catch (error) {
-                    logError(`Network error auto-loading sheet: ${error}`);
-                    // Don't show alert for auto-load errors, just log them
-                }
-            }
-
-            // Handle authentication
-            authButton.addEventListener('click', async function() {
-                try {
-                    const response = await fetch('/auth');
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        // Open auth URL in new tab
-                        window.open(data.auth_url, '_blank');
-                    } else {
-                        const authError = document.getElementById('authError');
-                        authError.textContent = 'Error starting authentication: ' + data.error;
-                        authError.style.display = 'block';
-                    }
-                } catch (error) {
-                    const authError = document.getElementById('authError');
-                    authError.textContent = 'Error starting authentication: ' + error;
-                    authError.style.display = 'block';
-                }
-            });
-
-
-
-            // Handle auth callback
-            window.addEventListener('message', async function(event) {
-                if (event.data === 'auth_complete') {
-                    await checkAuthStatus();
-                } else if (event.data === 'auth_error') {
-                    const authError = document.getElementById('authError');
-                    authError.textContent = 'Authentication failed. Please try again.';
-                    authError.style.display = 'block';
-                }
-            });
-
-            function enableControls() {
-                loadForm.querySelector('button').disabled = false;
-                previewChangesBtn.disabled = false;
-                document.getElementById('loadCurrentCalendarBtn').disabled = false;
-            }
-
-            function disableControls() {
-                loadForm.querySelector('button').disabled = true;
-                previewChangesBtn.disabled = true;
-                applyChangesBtn.disabled = true;
-                document.getElementById('loadCurrentCalendarBtn').disabled = true;
-            }
-
-            // Force re-authentication function
-            window.forceReauth = async function() {
-                try {
-                    logInfo('Force re-authenticating...');
-                    const response = await fetch('/logout');
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        logSuccess('Logged out successfully');
-                        await checkAuthStatus();
-                    } else {
-                        logError(`Logout failed: ${data.error}`);
-                    }
-                } catch (error) {
-                    logError(`Error during force re-auth: ${error}`);
-                }
-            };
-
-            // Handle logout
-            document.getElementById('logoutButton').addEventListener('click', async function() {
-                try {
-                    logInfo('Logging out...');
-                    const response = await fetch('/logout');
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        logSuccess('Logged out successfully');
-                        await checkAuthStatus();
-                    } else {
-                        logError(`Logout failed: ${data.error}`);
-                    }
-                } catch (error) {
-                    logError(`Error during logout: ${error}`);
-                }
-            });
-
-            // Initial auth status check
-            checkAuthStatus();
-
-            loadForm.addEventListener('submit', async function(e) {
-                e.preventDefault();
-                const spreadsheetId = document.getElementById('spreadsheetId').value;
-                const useTraditionalParser = true; // Always use traditional parser
-                const submitButton = loadForm.querySelector('button[type="submit"]');
-                const originalButtonText = submitButton.innerHTML;
-
-                logInfo(`Starting sheet load - Spreadsheet ID: ${spreadsheetId}, Traditional Parser: ${useTraditionalParser}`);
-
-                // Show loading state
-                submitButton.disabled = true;
-                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading Sheet...';
-
-                try {
-                    logDebug('Sending request to /load_sheet');
-                    const response = await fetch('/load_sheet', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ 
-                            spreadsheet_id: spreadsheetId,
-                            use_traditional_parser: useTraditionalParser
-                        })
-                    });
-
-                    const data = await response.json();
-                    logDebug(`Response received: ${JSON.stringify(data)}`);
-                    
-                    if (data.success) {
-                        logSuccess(`Sheet loaded successfully: ${data.spreadsheet_title}`);
-                        // Always update the spreadsheet title
-                        const spreadsheetInfo = document.getElementById('spreadsheetInfo');
-                        const spreadsheetTitleEl = document.getElementById('spreadsheetTitle');
-                        spreadsheetTitleEl.textContent = data.spreadsheet_title;
-                        spreadsheetInfo.style.display = 'block';
-
-                        if (data.sheets) {
-                            logInfo(`Found ${data.sheets.length} sheets: ${data.sheets.join(', ')}`);
-                            // Create tab buttons
-                            sheetTabs.innerHTML = '';
-                            
-                            // Add individual sheet buttons first
-                            data.sheets.forEach((sheet, index) => {
-                                const button = document.createElement('button');
-                                button.type = 'button';
-                                button.className = 'btn btn-outline-primary';
-                                if (index === 0) button.classList.add('active');
-                                button.textContent = sheet;
-                                button.onclick = () => loadSheetData(spreadsheetId, sheet, useTraditionalParser);
-                                sheetTabs.appendChild(button);
-                            });
-                            
-                            // Add All Sports button at the end
-                            const masterButton = document.createElement('button');
-                            masterButton.type = 'button';
-                            masterButton.className = 'btn btn-success';
-                            masterButton.textContent = 'All Sports';
-                            masterButton.onclick = () => loadAllSheets(spreadsheetId, data.sheets, useTraditionalParser);
-                            sheetTabs.appendChild(masterButton);
-                            
-                            // Create a separate row for the Generate All Calendars button
-                            const generateAllRow = document.createElement('div');
-                            generateAllRow.className = 'row mt-3';
-                            generateAllRow.innerHTML = `
-                                <div class="col-12">
-                                    <button type="button" class="btn btn-success btn-lg fw-bold shadow py-3 mb-2 w-100" onclick="applyAllSheets('${spreadsheetId}', '${data.sheets.join(',')}', ${useTraditionalParser})">
-                                        <i class="bi bi-calendar-plus"></i>
-                                        Generate All Calendars
-                                    </button>
-                                </div>
-                            `;
-                            
-                            // Insert the new row after the sheet tabs
-                            sheetTabs.parentNode.insertBefore(generateAllRow, sheetTabs.nextSibling);
-                            
-                            sheetTabs.style.display = 'block';
-                            
-                            // Load first sheet by default
-                            if (data.sheets.length > 0) {
-                                setCurrentSheetName(data.sheets[0]);
-                                logInfo(`Auto-loading first sheet: ${data.sheets[0]}`);
-                                loadSheetData(spreadsheetId, data.sheets[0], useTraditionalParser);
-                            }
-                        } else {
-                            logWarning('No sheets found in spreadsheet');
-                            sheetTabs.style.display = 'none';
-                        }
-                    } else {
-                        logError(`Error loading sheet: ${data.error}`);
-                        alert('Error loading sheet: ' + data.error);
-                    }
-                } catch (error) {
-                    logError(`Network error loading sheet: ${error}`);
-                    alert('Error loading sheet: ' + error);
-                } finally {
-                    // Restore button state
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = originalButtonText;
-                }
-            });
-
-            function showLoading() {
-                const sheetPreview = document.getElementById('sheetPreview');
-                if (!sheetPreview) return;
-
-                const loadingSpinner = sheetPreview.querySelector('.loading-spinner');
-                const noDataMessage = sheetPreview.querySelector('.no-data-message');
-                const contentArea = sheetPreview.querySelector('.content-area');
-
-                if (loadingSpinner) loadingSpinner.style.display = 'block';
-                if (noDataMessage) noDataMessage.style.display = 'none';
-                if (contentArea) contentArea.style.display = 'none';
-            }
-
-            function hideLoading() {
-                const sheetPreview = document.getElementById('sheetPreview');
-                if (!sheetPreview) return;
-
-                const loadingSpinner = sheetPreview.querySelector('.loading-spinner');
-                const contentArea = sheetPreview.querySelector('.content-area');
-
-                if (loadingSpinner) loadingSpinner.style.display = 'none';
-                if (contentArea) contentArea.style.display = 'block';
-            }
-
-            // Make loadSheetData globally accessible
-            window.loadSheetData = async function(spreadsheetId, sheetName, useTraditionalParser) {
-                logInfo(`Loading sheet data - Sheet: ${sheetName}, Traditional Parser: ${useTraditionalParser}`);
-                
-                // Clear the "Sport: " line while loading
-                setCurrentSheetName('');
-                
-                try {
-                    // Show loading spinner in sheet preview
-                    const sheetPreview = document.getElementById('sheetPreview');
-                    const loadingSpinner = sheetPreview.querySelector('.loading-spinner');
-                    const noDataMessage = sheetPreview.querySelector('.no-data-message');
-                    const contentArea = sheetPreview.querySelector('.content-area');
-                    
-                    loadingSpinner.style.display = 'block';
-                    if (noDataMessage) noDataMessage.style.display = 'none';
-                    if (contentArea) contentArea.style.display = 'none';
-                    
-                    // Show Gemini progress wheel if using Gemini
-                    if (!useTraditionalParser) {
-                        logInfo('Showing Gemini progress overlay');
-                        document.getElementById('geminiProgress').style.display = 'flex';
-                    } else {
-                        logDebug('Using traditional parser - no Gemini overlay');
-                    }
-                    
-                    // Update active tab and show loading state
-                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        btn.classList.remove('active');
-                        if (btn.textContent === sheetName) {
-                            btn.classList.add('active');
-                            // Show loading state on active tab
-                            const originalText = btn.textContent;
-                            btn.disabled = true;
-                            btn.setAttribute('data-original-text', originalText);
-                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
-                        }
-                    });
-
-                    logDebug(`Sending request for sheet: ${sheetName}`);
-                    const response = await fetch('/load_sheet', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ 
-                            spreadsheet_id: spreadsheetId,
-                            sheet_name: sheetName,
-                            use_traditional_parser: useTraditionalParser
-                        })
-                    });
-
-                    const data = await response.json();
-                    logDebug(`Sheet response received: ${JSON.stringify(data)}`);
-                    
-                    if (data.needs_auth || (data.error && data.error.includes('re-authenticate'))) {
-                        logWarning('Authentication required - redirecting to auth');
-                        // Show authentication button and status
-                        authButton.style.display = 'block';
-                        authStatus.innerHTML = '<p class="text-danger">Authentication required</p>';
-                        disableControls();
-                        return;
-                    }
-
-                    if (data.success) {
-                        logSuccess(`Sheet data loaded successfully - Found ${data.events ? data.events.length : 0} events`);
-                        
-                        // Display debug logs if available
-                        if (data.debug_logs && data.debug_logs.length > 0) {
-                            renderServerLogs(data.debug_logs);
-                        }
-                        
-                        // Display the data
-                        if (data.events) {
-                            displayEvents(data.events, data.spreadsheet_title);
-                        } else {
-                            logWarning('No events found in sheet data');
-                            displayEvents([], data.spreadsheet_title);
-                        }
-                        setCurrentSheetName(sheetName);
-                    } else {
-                        // Display debug logs if available (even in error case)
-                        if (data.debug_logs && data.debug_logs.length > 0) {
-                            renderServerLogs(data.debug_logs);
-                        }
-                        
-                        // Check if the error is related to authentication
-                        if (data.error && (data.error.includes('expired') || data.error.includes('revoked'))) {
-                            logError('Session expired - authentication required');
-                            authButton.style.display = 'block';
-                            authStatus.innerHTML = '<p class="text-danger">Your session has expired. Please re-authenticate.</p>';
-                            disableControls();
-                        } else {
-                            logError(`Error loading sheet data: ${data.error}`);
-                            alert('Error loading sheet: ' + data.error);
-                        }
-                    }
-                } catch (error) {
-                    logError(`Exception in loadSheetData: ${error}`);
-                    // Check if the error is related to authentication
-                    if (error.message && (error.message.includes('expired') || error.message.includes('revoked'))) {
-                        logError('Session expired - authentication required');
-                        authButton.style.display = 'block';
-                        authStatus.innerHTML = '<p class="text-danger">Your session has expired. Please re-authenticate.</p>';
-                        disableControls();
-                    } else {
-                        alert('Error loading sheet: ' + error);
-                    }
-                } finally {
-                    logDebug('Cleaning up loadSheetData');
-                    hideLoading();
-                    if (!useTraditionalParser) {
-                        logDebug('Hiding Gemini progress overlay');
-                        document.getElementById('geminiProgress').style.display = 'none';
-                    }
-                    
-                    // Restore button states
-                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        if (btn.hasAttribute('data-original-text')) {
-                            const originalText = btn.getAttribute('data-original-text');
-                            btn.disabled = false;
-                            btn.innerHTML = originalText;
-                            btn.removeAttribute('data-original-text');
-                        }
-                    });
-                }
-            }
-
-            // Make loadAllSheets globally accessible
-            window.loadAllSheets = async function(spreadsheetId, sheets, useTraditionalParser) {
-                logInfo(`Loading all sheets - ${sheets.length} sheets, Traditional Parser: ${useTraditionalParser}`);
-                
-                // Clear the "Sport: " line while loading
-                setCurrentSheetName('');
-                
-                try {
-                    showLoading();
-                    
-                    // Update active tab and show loading state
-                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        btn.classList.remove('active');
-                        if (btn.textContent === 'All Sports') {
-                            btn.classList.add('active');
-                            // Show loading state on ALL button
-                            const originalText = btn.textContent;
-                            btn.disabled = true;
-                            btn.setAttribute('data-original-text', originalText);
-                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + originalText;
-                        }
-                    });
-
-                    // Load all sheets and combine events
-                    const allEvents = [];
-                    let spreadsheetTitle = '';
-                    
-                    for (const sheet of sheets) {
-                        logDebug(`Loading sheet: ${sheet}`);
-                        const response = await fetch('/load_sheet', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ 
-                                spreadsheet_id: spreadsheetId,
-                                sheet_name: sheet,
-                                use_traditional_parser: useTraditionalParser
-                            })
-                        });
-
-                        const data = await response.json();
-                        if (data.success) {
-                            if (!spreadsheetTitle) {
-                                spreadsheetTitle = data.spreadsheet_title;
-                            }
-                            if (data.events) {
-                                logDebug(`Added ${data.events.length} events from sheet: ${sheet}`);
-                                allEvents.push(...data.events);
-                            } else {
-                                logWarning(`No events found in sheet: ${sheet}`);
-                            }
-                        } else {
-                            logError(`Failed to load sheet: ${sheet} - ${data.error}`);
-                        }
-                    }
-
-                    logInfo(`Total events loaded: ${allEvents.length}`);
-                    // Sort events by date
-                    allEvents.sort((a, b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
-
-                    // Display all events
-                    displayEvents(allEvents, spreadsheetTitle);
-                    setCurrentSheetName('All Sports');
-                } catch (error) {
-                    logError(`Exception in loadAllSheets: ${error}`);
-                    alert('Error loading all sheets: ' + error);
-                } finally {
-                    logDebug('Cleaning up loadAllSheets');
-                    hideLoading();
-                    
-                    // Restore button states
-                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        if (btn.hasAttribute('data-original-text')) {
-                            const originalText = btn.getAttribute('data-original-text');
-                            btn.disabled = false;
-                            btn.innerHTML = originalText;
-                            btn.removeAttribute('data-original-text');
-                        }
-                    });
-                }
-            }
-
-            // Make applyAllSheets globally accessible
-            window.applyAllSheets = async function(spreadsheetId, sheetsParam, useTraditionalParser) {
-                // Handle both array and comma-separated string
-                const sheets = Array.isArray(sheetsParam) ? sheetsParam : sheetsParam.split(',');
-                logInfo(`🚀 Starting bulk apply operation for ${sheets.length} sheets`);
-                logInfo(`📋 Sheets to process: ${sheets.join(', ')}`);
-                logInfo(`🔧 Parser mode: ${useTraditionalParser ? 'Traditional' : 'Gemini AI'}`);
-                
-                // Confirm with user
-                const confirmed = confirm(`This will create calendar entries for ALL ${sheets.length} sheets at once. This may take several minutes. Continue?`);
-                if (!confirmed) {
-                    logInfo('❌ User cancelled bulk apply operation');
-                    return;
-                }
-                
-                try {
-                    // Show progress overlay
-                    showProgress();
-                    addProgressStep(`Starting bulk operation for ${sheets.length} sheets`, 'current');
-                    
-                    // Set up cancel button
-                    document.getElementById('cancelProgressBtn').onclick = () => {
-                        progressCancelled = true;
-                        hideProgress();
-                        logInfo('❌ User cancelled the operation');
-                    };
-                    
-                    // Initialize progress steps
-                    const progressDetails = document.getElementById('progressDetails');
-                    progressDetails.innerHTML = '';
-                    
-                    // Add a step for each sheet (pending)
-                    const sheetStepElements = {};
-                    sheets.forEach(sheet => {
-                        const stepDiv = document.createElement('div');
-                        stepDiv.className = 'progress-step pending';
-                        stepDiv.setAttribute('data-sheet', sheet);
-                        stepDiv.innerHTML = `
-                            <div class="progress-step-icon">⏳</div>
-                            <div class="progress-step-text">${sheet}: Pending</div>
-                        `;
-                        progressDetails.appendChild(stepDiv);
-                        sheetStepElements[sheet] = stepDiv;
-                    });
-                    
-                    // Add a finalizing step
-                    addProgressStep('Finalizing calendar updates', 'pending');
-                    
-                    // Show initial progress
-                    updateProgress(0, 'Initializing bulk operation...');
-                    
-                    // Update active tab and show loading state
-                    logInfo('🔘 Updating UI button states...');
-                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        btn.classList.remove('active');
-                        if (btn.textContent === 'Generate All Calendars') {
-                            btn.classList.add('active');
-                            btn.disabled = true;
-                            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Processing...';
-                        }
-                    });
-
-                    // Mark the first sheet as processing (simulate real-time)
-                    if (sheets.length > 0) {
-                        const firstStep = sheetStepElements[sheets[0]];
-                        if (firstStep) {
-                            firstStep.className = 'progress-step current';
-                            firstStep.querySelector('.progress-step-icon').textContent = '🔄';
-                            firstStep.querySelector('.progress-step-text').textContent = `${sheets[0]}: Processing...`;
-                        }
-                    }
-                    updateProgress(5, 'Sending request to server...');
-                    
-                    logInfo('📡 Sending bulk apply request to server...');
-                    const response = await fetch('/apply_all_sheets', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ 
-                            spreadsheet_id: spreadsheetId,
-                            use_traditional_parser: useTraditionalParser
-                        })
-                    });
-
-                    if (progressCancelled) return;
-                    
-                    updateProgress(15, 'Processing server response...');
-                    
-                    logInfo('📥 Response received from server');
-                    const data = await response.json();
-                    logDebug(`Server response: ${JSON.stringify(data)}`);
-                    
-                    // Display debug logs if available
-                    if (data.debug_logs && data.debug_logs.length > 0) {
-                        renderServerLogs(data.debug_logs);
-                    }
-                    
-                    // Mark each sheet as done (success or error)
-                    let completedCount = 0;
-                    if (data.sheet_results) {
-                        for (const [sheetName, result] of Object.entries(data.sheet_results)) {
-                            const stepDiv = sheetStepElements[sheetName];
-                            if (stepDiv) {
-                                stepDiv.className = 'progress-step completed';
-                                stepDiv.querySelector('.progress-step-icon').textContent = result.success ? '✅' : '❌';
-                                stepDiv.querySelector('.progress-step-text').textContent = `${sheetName}: ${result.success ? 'Done' : 'Error'}`;
-                                completedCount++;
-                                updateProgress(Math.round((completedCount / sheets.length) * 80), `${sheetName} processed`);
-                            }
-                        }
-                    }
-                    // Mark finalizing step as current
-                    const finalizingStep = progressDetails.lastElementChild;
-                    if (finalizingStep) {
-                        finalizingStep.className = 'progress-step current';
-                        finalizingStep.querySelector('.progress-step-icon').textContent = '🔄';
-                        finalizingStep.querySelector('.progress-step-text').textContent = 'Finalizing calendar updates...';
-                    }
-                    updateProgress(90, 'Building results display...');
-                    
-                    if (data.success) {
-                        if (finalizingStep) {
-                            finalizingStep.className = 'progress-step completed';
-                            finalizingStep.querySelector('.progress-step-icon').textContent = '✅';
-                            finalizingStep.querySelector('.progress-step-text').textContent = 'All calendars finalized!';
-                        }
-                        updateProgress(100, 'Operation completed successfully!');
-                        
-                        logSuccess(`✅ Bulk operation completed successfully!`);
-                        logInfo(`📊 Summary: ${data.total_events_created} events created, ${data.total_events_updated} updated, ${data.total_events_deleted} deleted`);
-                        
-                        // Build results table
-                        let resultsHtml = `
-                            <div class="alert alert-success">
-                                <i class="bi bi-check-circle"></i>
-                                <strong>Success!</strong> All calendars have been generated successfully.
-                            </div>
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="mb-0">Operation Summary</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-3">
-                                            <div class="text-center">
-                                                <div class="h4 text-success">${data.total_events_created}</div>
-                                                <small class="text-muted">Events Created</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <div class="text-center">
-                                                <div class="h4 text-primary">${data.total_events_updated}</div>
-                                                <small class="text-muted">Events Updated</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <div class="text-center">
-                                                <div class="h4 text-warning">${data.total_events_deleted}</div>
-                                                <small class="text-muted">Events Deleted</small>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <div class="text-center">
-                                                <div class="h4 text-info">${Object.keys(data.sheet_results).length}</div>
-                                                <small class="text-muted">Calendars Updated</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="card">
-                                <div class="card-header">
-                                    <h6 class="mb-0">Calendar Details</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm">
-                                            <thead>
-                                                <tr>
-                                                    <th>Calendar</th>
-                                                    <th>Status</th>
-                                                    <th>Created</th>
-                                                    <th>Updated</th>
-                                                    <th>Deleted</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                        `;
-                        
-                        for (const [sheetName, result] of Object.entries(data.sheet_results)) {
-                            const statusClass = result.success ? 'success' : 'danger';
-                            const statusText = result.success ? 'Success' : 'Failed';
-                            const created = result.events_created || 0;
-                            const updated = result.events_updated || 0;
-                            const deleted = result.events_deleted || 0;
-                            
-                            resultsHtml += `
-                                <tr>
-                                    <td>${sheetName}</td>
-                                    <td><span class="badge bg-${statusClass}">${statusText}</span></td>
-                                    <td>${created}</td>
-                                    <td>${updated}</td>
-                                    <td>${deleted}</td>
-                                </tr>
-                            `;
-                        }
-                        
-                        resultsHtml += `
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="alert alert-info">
-                                <i class="bi bi-info-circle"></i>
-                                View your updated calendars at: 
-                                <a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
-                            </div>
-                        `;
-                        
-                        const calendarPreview = document.getElementById('calendarPreview');
-                        calendarPreview.innerHTML = resultsHtml;
-                        
-                        // Refresh the SLOHS calendars after successful completion
-                        logInfo('🔄 Refreshing SLOHS calendars after successful bulk operation...');
-                        await loadSLOHSCalendars();
-                        logSuccess('✅ SLOHS calendars refreshed successfully');
-                        
-                    } else {
-                        setProgressError(`Operation failed: ${data.error}`);
-                        logError(`❌ Bulk operation failed: ${data.error}`);
-                        logError(`💥 Server returned error response`);
-                        
-                        const calendarPreview = document.getElementById('calendarPreview');
-                        calendarPreview.innerHTML = `
-                            <div class="alert alert-danger">
-                                <i class="bi bi-exclamation-triangle"></i>
-                                <strong>Error applying all sheets:</strong> ${data.error}
-                            </div>
-                        `;
-                    }
-                } catch (error) {
-                    setProgressError(`Network error: ${error.message}`);
-                    logError(`💥 Exception in applyAllSheets: ${error}`);
-                    logError(`🔍 Error details: ${error.message || error}`);
-                    
-                    const calendarPreview = document.getElementById('calendarPreview');
-                    calendarPreview.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="bi bi-exclamation-triangle"></i>
-                            <strong>Error applying all sheets:</strong> ${error.message || error}
-                        </div>
-                    `;
-                } finally {
-                    // Wait a moment to show completion, then hide progress
-                    setTimeout(() => {
-                        hideProgress();
-                    }, 2000);
-                    
-                    logInfo('🧹 Cleaning up bulk apply operation');
-                    
-                    // Restore button states
-                    logInfo('🔘 Restoring button states...');
-                    Array.from(sheetTabs.getElementsByTagName('button')).forEach(btn => {
-                        if (btn.textContent.includes('Processing...')) {
-                            btn.disabled = false;
-                            btn.innerHTML = 'Generate All Calendars';
-                        }
-                    });
-                    logInfo('✅ Bulk apply operation cleanup completed');
-                }
-            }
-
-            // Add date formatting function
-            function formatDateTime(dateTimeStr) {
-                // Check if this is a date-only string (all-day event)
-                if (dateTimeStr && dateTimeStr.includes('T') === false) {
-                    // This is a date-only string (YYYY-MM-DD format)
-                    const date = new Date(dateTimeStr + 'T00:00:00');
-                    const options = {
-                        weekday: 'short',
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                    };
-                    return date.toLocaleDateString('en-US', options);
-                } else {
-                    // This is a datetime string
-                    const date = new Date(dateTimeStr);
-                    const options = {
-                        weekday: 'short',
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    };
-                    return date.toLocaleDateString('en-US', options);
-                }
-            }
-
-            function formatTime(dateTimeStr) {
-                const date = new Date(dateTimeStr);
-                return date.toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit'
+        // Handle sheet selection
+        function displaySheetTabs(sheets) {
+            const container = document.getElementById('sheet-tabs');
+            container.innerHTML = '';
+            
+            sheets.forEach(sheet => {
+                const tab = document.createElement('span');
+                tab.className = 'sheet-tab';
+                tab.textContent = sheet;
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    loadSheetData(document.getElementById('spreadsheet-id').value, sheet);
                 });
+                container.appendChild(tab);
+            });
+            
+            if (sheets.length > 0) {
+                container.firstChild.classList.add('active');
             }
+        }
 
-            function displayEvents(events, spreadsheetTitle) {
-                // Display spreadsheet info
-                const spreadsheetInfo = document.getElementById('spreadsheetInfo');
-                const spreadsheetTitleEl = document.getElementById('spreadsheetTitle');
+        // Load sheet data
+        async function loadSheetData(spreadsheetId, sheetName) {
+            try {
+                const response = await fetch('/load_sheet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        spreadsheet_id: spreadsheetId,
+                        sheet_name: sheetName
+                    })
+                });
+
+                const data = await response.json();
                 
-                if (spreadsheetTitle) {
-                    spreadsheetTitleEl.textContent = spreadsheetTitle;
-                    spreadsheetInfo.style.display = 'block';
+                if (data.success) {
+                    currentSheet = sheetName;
+                    currentEvents = data.events || [];
+                    displayEvents(currentEvents);
+                    document.getElementById('events-section').style.display = 'block';
                 } else {
-                    spreadsheetInfo.style.display = 'none';
+                    showStatus(data.error, 'danger');
                 }
-                
-                // Display sheet preview
-                const sheetPreview = document.getElementById('sheetPreview');
-                if (!sheetPreview) return;
-
-                const noDataMessage = sheetPreview.querySelector('.no-data-message');
-                const contentArea = sheetPreview.querySelector('.content-area') || document.createElement('div');
-                contentArea.className = 'content-area';
-                
-                if (noDataMessage) {
-                    noDataMessage.style.display = 'none';
-                }
-                
-                if (!Array.isArray(events) || events.length === 0) {
-                    if (noDataMessage) {
-                        noDataMessage.style.display = 'block';
-                        noDataMessage.querySelector('p').textContent = 'No events found in this sheet';
-                    }
-                    contentArea.innerHTML = '';
-                } else {
-                    contentArea.innerHTML = `
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Time</th>
-                                        <th>Event</th>
-                                        <th>Location</th>
-                                        <th>Transportation</th>
-                                        <th>Release Time</th>
-                                        <th>Departure Time</th>
-                                        <th>Attire</th>
-                                        <th>Notes</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${events.map(event => {
-                                        // Handle both dateTime (timed events) and date (all-day events)
-                                        let start = null;
-                                        let end = null;
-                                        let isAllDay = false;
-                                        
-                                        if (event?.start?.dateTime) {
-                                            // Timed event - parse directly to avoid timezone conversion
-                                            start = new Date(event.start.dateTime);
-                                            end = event?.end?.dateTime ? new Date(event.end.dateTime) : null;
-                                        } else if (event?.start?.date) {
-                                            // All-day event - parse date string correctly to avoid timezone issues
-                                            console.log('All-day event date:', event.start.date);
-                                            // Parse YYYY-MM-DD format correctly by adding time component
-                                            start = new Date(event.start.date + 'T00:00:00');
-                                            console.log('Parsed start date:', start);
-                                            end = event?.end?.date ? new Date(event.end.date + 'T00:00:00') : null;
-                                            isAllDay = true;
-                                        }
-                                        
-                                        const formatField = (value) => value || 'N/A';
-                                        
-                                        const formatTime = (start, end, isAllDay) => {
-                                            if (isAllDay) {
-                                                return 'All Day';
-                                            }
-                                            if (start && end) {
-                                                return `${start.toLocaleTimeString('en-US', { 
-                                                    hour: 'numeric', 
-                                                    minute: '2-digit' 
-                                                })} - ${end.toLocaleTimeString('en-US', { 
-                                                    hour: 'numeric', 
-                                                    minute: '2-digit' 
-                                                })}`;
-                                            }
-                                            return 'N/A';
-                                        };
-                                        
-                                        return `
-                                            <tr>
-                                                <td>${start ? start.toLocaleDateString('en-US', { 
-                                                    weekday: 'long', 
-                                                    year: 'numeric', 
-                                                    month: 'long', 
-                                                    day: 'numeric' 
-                                                }) : 'N/A'}</td>
-                                                <td>${formatTime(start, end, isAllDay)}</td>
-                                                <td>${formatField(event?.summary)}</td>
-                                                <td>${formatField(event?.location)}</td>
-                                                <td>${formatField(event?.transportation)}</td>
-                                                <td>${formatField(event?.release_time)}</td>
-                                                <td>${formatField(event?.departure_time)}</td>
-                                                <td>${formatField(event?.attire)}</td>
-                                                <td>${formatField(event?.notes)}</td>
-                                            </tr>
-                                        `;
-                                    }).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-                }
-
-                // Only append contentArea if it's not already in the DOM
-                if (!sheetPreview.contains(contentArea)) {
-                    sheetPreview.appendChild(contentArea);
-                }
-                
-                previewChangesBtn.disabled = false;
-                document.getElementById('loadCurrentCalendarBtn').disabled = false;
+            } catch (error) {
+                showStatus('Error loading sheet data: ' + error.message, 'danger');
             }
+        }
 
-            previewChangesBtn.addEventListener('click', async function() {
-                try {
-                    // Disable both buttons while loading
-                    previewChangesBtn.disabled = true;
-                    applyChangesBtn.disabled = true;
-
-                    const spreadsheetId = document.getElementById('spreadsheetId').value;
-                    const useTraditionalParser = true; // Always use traditional parser
-                    
-                    // Get the currently active sheet
-                    const activeTab = sheetTabs.querySelector('.active');
-                    const sheetName = activeTab ? activeTab.textContent : null;
-                    
-                    if (!sheetName) {
-                        alert('Please select a specific sheet to preview changes');
-                        return;
-                    }
-
-                    if (sheetName === 'All Sports') {
-                        // Special case: preview all sheets combined
-                        const response = await fetch('/preview_all_sheets', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                spreadsheet_id: spreadsheetId,
-                                use_traditional_parser: useTraditionalParser
-                            })
-                        });
-
-                        const data = await response.json();
-                        
-                        // Display debug logs if available
-                        if (data.debug_logs && data.debug_logs.length > 0) {
-                            renderServerLogs(data.debug_logs);
-                        }
-                        
-                        if (data.success) {
-                            // Display combined preview for all sheets
-                            const allEvents = data.events || [];
-                            
-                            if (allEvents.length === 0) {
-                                changesPreview.innerHTML = `
-                                    <div class="alert alert-info">
-                                        <i class="bi bi-info-circle"></i>
-                                        No events found in any sheets.
-                                    </div>
-                                `;
-                            } else {
-                                changesPreview.innerHTML = `
-                                    <div class="alert alert-info">
-                                        <i class="bi bi-info-circle"></i>
-                                        Preview of ${allEvents.length} events from all sheets to be added to the <b>All Sports</b> calendar
-                                    </div>
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <h5>All Sports Preview</h5>
-                                            <div class="list-group">
-                                                ${allEvents.map(event => `
-                                                    <div class="card event-card create-event">
-                                                        <div class="card-body">
-                                                            <h6 class="card-title">
-                                                                <i class="bi bi-plus-circle"></i>
-                                                                Create Event
-                                                            </h6>
-                                                            <p class="card-text">
-                                                                <strong>${event.summary}</strong><br>
-                                                                Date: ${formatDateTime(event.start.dateTime || event.start.date)}<br>
-                                                                Time: ${event.start.dateTime ? formatTime(event.start.dateTime) : 'All Day'}<br>
-                                                                Location: ${event.location || 'N/A'}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                `).join('')}
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <h5>Calendar Preview</h5>
-                                            <div class="alert alert-info">
-                                                <i class="bi bi-info-circle"></i>
-                                                After applying changes, you can view your calendar at:
-                                                <br><a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
-                                            </div>
-                                            <div class="card">
-                                                <div class="card-body">
-                                                    <h6 class="card-title">Events to be added:</h6>
-                                                    <div class="table-responsive">
-                                                        <table class="table table-sm">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th>Date</th>
-                                                                    <th>Event</th>
-                                                                    <th>Location</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                ${allEvents.map(event => {
-                                                                    let eventDate;
-                                                                    if (event.start.dateTime) {
-                                                                        eventDate = new Date(event.start.dateTime);
-                                                                    } else if (event.start.date) {
-                                                                        // Parse all-day event date correctly
-                                                                        eventDate = new Date(event.start.date + 'T00:00:00');
-                                                                    }
-                                                                    return `
-                                                                        <tr>
-                                                                            <td>${eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                                                                            <td>${event.summary}</td>
-                                                                            <td>${event.location || 'N/A'}</td>
-                                                                        </tr>
-                                                                    `;
-                                                                }).join('')}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                `;
-                            }
-                            // Enable apply button after successful preview
-                            applyChangesBtn.disabled = false;
-                            return;
-                        } else {
-                            alert('Error previewing All Sports changes: ' + data.error);
-                            applyChangesBtn.disabled = true;
-                            return;
-                        }
-                    }
-
-                    const response = await fetch('/preview_changes', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            spreadsheet_id: spreadsheetId,
-                            sheet_name: sheetName,
-                            use_traditional_parser: useTraditionalParser
-                        })
-                    });
-
-                    const data = await response.json();
-                    
-                    // Display debug logs if available
-                    if (data.debug_logs && data.debug_logs.length > 0) {
-                        renderServerLogs(data.debug_logs);
-                    }
-                    
-                    if (data.success) {
-                        // Display changes preview
-                        const changes = data.changes;
-                        const allChanges = [];
-                        
-                        // Add events to be added
-                        changes.to_add.forEach(event => {
-                            allChanges.push({
-                                type: 'create',
-                                event: event
-                            });
-                        });
-                        
-                        // Add events to be updated
-                        changes.to_update.forEach(update => {
-                            allChanges.push({
-                                type: 'update',
-                                event: update.new,
-                                oldEvent: update.old
-                            });
-                        });
-                        
-                        // Add events to be deleted
-                        changes.to_delete.forEach(event => {
-                            allChanges.push({
-                                type: 'delete',
-                                event: event
-                            });
-                        });
-                        
-                        if (allChanges.length === 0) {
-                            changesPreview.innerHTML = `
-                                <div class="alert alert-info">
-                                    <i class="bi bi-info-circle"></i>
-                                    No changes needed. All events are up to date.
-                                </div>
-                            `;
-                        } else {
-                            // Find the first event date to set calendar month
-                            let firstEventDate = null;
-                            if (allChanges.length > 0) {
-                                const firstEvent = allChanges[0].event;
-                                if (firstEvent.start.dateTime) {
-                                    firstEventDate = new Date(firstEvent.start.dateTime);
-                                } else if (firstEvent.start.date) {
-                                    // Parse all-day event date correctly
-                                    firstEventDate = new Date(firstEvent.start.date + 'T00:00:00');
-                                }
-                            }
-                            
-                            // Set calendar month to first event month
-                            const calendarMonth = firstEventDate ? 
-                                `${firstEventDate.getFullYear()}-${String(firstEventDate.getMonth() + 1).padStart(2, '0')}` : 
-                                '2025-09';
-                            
-                            changesPreview.innerHTML = `
-                                <div class="alert alert-info">
-                                    <i class="bi bi-info-circle"></i>
-                                    Preview of ${allChanges.length} changes to be applied
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <h5>Changes Preview</h5>
-                                        <div class="list-group">
-                                            ${allChanges.map(change => `
-                                                <div class="card event-card ${change.type}-event">
-                                                    <div class="card-body">
-                                                        <h6 class="card-title">
-                                                            <i class="bi ${change.type === 'create' ? 'bi-plus-circle' : 
-                                                                         change.type === 'update' ? 'bi-arrow-repeat' : 
-                                                                         'bi-trash'}"></i>
-                                                            ${change.type.charAt(0).toUpperCase() + change.type.slice(1)} Event
-                                                        </h6>
-                                                        <p class="card-text">
-                                                            <strong>${change.event.summary}</strong><br>
-                                                            Date: ${formatDateTime(change.event.start.dateTime || change.event.start.date)}<br>
-                                                            Time: ${change.event.start.dateTime ? formatTime(change.event.start.dateTime) : 'All Day'}<br>
-                                                            Location: ${change.event.location || 'N/A'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <h5>Calendar Preview</h5>
-                                        <div class="alert alert-info">
-                                            <i class="bi bi-info-circle"></i>
-                                            After applying changes, you can view your calendar at:
-                                            <br><a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
-                                        </div>
-                                        <div class="card">
-                                            <div class="card-body">
-                                                <h6 class="card-title">Events to be added:</h6>
-                                                <div class="table-responsive">
-                                                    <table class="table table-sm">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>Date</th>
-                                                                <th>Event</th>
-                                                                <th>Location</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            ${allChanges.filter(change => change.type === 'create').map(change => {
-                                                                const event = change.event;
-                                                                let eventDate;
-                                                                if (event.start.dateTime) {
-                                                                    eventDate = new Date(event.start.dateTime);
-                                                                } else if (event.start.date) {
-                                                                    // Parse all-day event date correctly
-                                                                    eventDate = new Date(event.start.date + 'T00:00:00');
-                                                                }
-                                                                return `
-                                                                    <tr>
-                                                                        <td>${eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                                                                        <td>${event.summary}</td>
-                                                                        <td>${event.location || 'N/A'}</td>
-                                                                    </tr>
-                                                                `;
-                                                            }).join('')}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                        }
-                        // Only enable apply button after successful preview
-                        applyChangesBtn.disabled = false;
-                    } else {
-                        alert('Error previewing changes: ' + data.error);
-                        applyChangesBtn.disabled = true;
-                    }
-                } catch (error) {
-                    alert('Error previewing changes: ' + error);
-                    applyChangesBtn.disabled = true;
-                } finally {
-                    // Re-enable preview button
-                    previewChangesBtn.disabled = false;
-                }
-            });
-
-            // Load Current Calendar button event listener
-            document.getElementById('loadCurrentCalendarBtn').addEventListener('click', async function() {
-                try {
-                    // Disable button while loading
-                    this.disabled = true;
-                    this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading...';
-
-                    // Get the currently active sheet
-                    const activeTab = sheetTabs.querySelector('.active');
-                    const sheetName = activeTab ? activeTab.textContent : null;
-                    
-                    if (!sheetName) {
-                        alert('Please select a specific sheet to load current calendar');
-                        return;
-                    }
-
-                    logInfo(`Loading current calendar for sheet: ${sheetName}`);
-
-                    const response = await fetch('/get_current_calendar', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            sheet_name: sheetName
-                        })
-                    });
-
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        logSuccess(`Loaded current calendar: ${data.total_events} events found`);
-                        
-                        // Display current calendar events
-                        const calendarPreview = document.getElementById('calendarPreview');
-                        
-                        if (data.events.length === 0) {
-                            calendarPreview.innerHTML = `
-                                <div class="alert alert-info">
-                                    <i class="bi bi-info-circle"></i>
-                                    <strong>Current Calendar: ${data.calendar_name}</strong><br>
-                                    No events found in the current calendar.
-                                </div>
-                            `;
-                        } else {
-                            // Sort events by date
-                            const sortedEvents = data.events.sort((a, b) => {
-                                const dateA = new Date(a.formatted_date.split(' (')[0]);
-                                const dateB = new Date(b.formatted_date.split(' (')[0]);
-                                return dateA - dateB;
-                            });
-
-                            calendarPreview.innerHTML = `
-                                <div class="alert alert-success">
-                                    <i class="bi bi-check-circle"></i>
-                                    <strong>Current Calendar: ${data.calendar_name}</strong><br>
-                                    Found ${data.total_events} events in the current calendar.
-                                </div>
-                                <div class="table-responsive">
-                                    <table class="table table-striped">
-                                        <thead>
-                                            <tr>
-                                                <th>Date</th>
-                                                <th>Event</th>
-                                                <th>Location</th>
-                                                <th>Transportation</th>
-                                                <th>Release Time</th>
-                                                <th>Departure Time</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${sortedEvents.map(event => `
-                                                <tr>
-                                                    <td>${event.formatted_date}</td>
-                                                    <td><strong>${event.summary}</strong></td>
-                                                    <td>${event.location}</td>
-                                                    <td>${event.transportation}</td>
-                                                    <td>${event.release_time}</td>
-                                                    <td>${event.departure_time}</td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            `;
-                        }
-                    } else {
-                        logError(`Error loading current calendar: ${data.error}`);
-                        calendarPreview.innerHTML = `
-                            <div class="alert alert-danger">
-                                <i class="bi bi-exclamation-triangle"></i>
-                                <strong>Error loading current calendar:</strong> ${data.error}
-                            </div>
-                        `;
-                    }
-                } catch (error) {
-                    logError(`Network error loading current calendar: ${error}`);
-                    calendarPreview.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="bi bi-exclamation-triangle"></i>
-                            <strong>Network error:</strong> ${error.message || error}
-                        </div>
-                    `;
-                } finally {
-                    // Re-enable button
-                    this.disabled = false;
-                    this.innerHTML = '<i class="bi bi-calendar-check"></i> Load Current Calendar';
-                }
-            });
-
-            applyChangesBtn.addEventListener('click', async function() {
-                logInfo('Apply Changes button clicked');
-                try {
-                    // Disable both buttons while applying changes
-                    previewChangesBtn.disabled = true;
-                    applyChangesBtn.disabled = true;
-                    logDebug('Buttons disabled');
-
-                    // Show loading state
-                    calendarPreview.innerHTML = `
-                        <div class="d-flex align-items-center justify-content-center h-100">
-                            <div class="text-center">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <div class="mt-2">Applying changes to calendar...</div>
-                            </div>
-                        </div>
-                    `;
-
-                    const spreadsheetId = document.getElementById('spreadsheetId').value;
-                    const useTraditionalParser = true; // Always use traditional parser
-                    logDebug(`Spreadsheet ID: ${spreadsheetId}, Traditional Parser: ${useTraditionalParser}`);
-                    
-                    // Get the currently active sheet
-                    const activeTab = sheetTabs.querySelector('.active');
-                    const sheetName = activeTab ? activeTab.textContent : null;
-                    logDebug(`Active sheet: ${sheetName}`);
-                    
-                    if (!sheetName) {
-                        logError('No active sheet selected');
-                        alert('Please select a specific sheet to apply changes');
-                        return;
-                    }
-
-                    if (sheetName === 'All Sports') {
-                        logInfo('Applying to All Sports master calendar');
-                        // Special case: apply all to master calendar
-                        const response = await fetch('/apply_all_to_master_calendar', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                spreadsheet_id: spreadsheetId,
-                                use_traditional_parser: useTraditionalParser
-                            })
-                        });
-                        const data = await response.json();
-                        logDebug(`All Sports response: ${JSON.stringify(data)}`);
-                        if (data.success) {
-                            calendarPreview.innerHTML = `
-                                <div class="alert alert-success">
-                                    <i class="bi bi-check-circle"></i>
-                                    Successfully applied ${data.total_events} events to the <b>All Sports</b> calendar!
-                                </div>
-                                <div class="alert alert-info">
-                                    <i class="bi bi-info-circle"></i>
-                                    View your updated calendar at: 
-                                    <a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
-                                </div>
-                            `;
-                            
-                            // Refresh the SLOHS calendars after successful All Sports operation
-                            logInfo('🔄 Refreshing SLOHS calendars after successful All Sports operation...');
-                            await loadSLOHSCalendars();
-                            logSuccess('✅ SLOHS calendars refreshed successfully');
-                            
-                        } else {
-                            calendarPreview.innerHTML = `
-                                <div class="alert alert-danger">
-                                    <i class="bi bi-exclamation-triangle"></i>
-                                    <strong>Error applying All Sports calendar:</strong> ${data.error}
-                                </div>
-                            `;
-                        }
-                        return;
-                    }
-
-                    // Default: apply changes to single sheet
-                    logInfo(`Making request to /apply_changes for sheet: ${sheetName}`);
-                    const response = await fetch('/apply_changes', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            spreadsheet_id: spreadsheetId,
-                            sheet_name: sheetName,
-                            use_traditional_parser: useTraditionalParser
-                        })
-                    });
-                    logDebug(`Response received from /apply_changes`);
-
-                    const data = await response.json();
-                    logDebug(`Response data: ${JSON.stringify(data)}`);
-                    if (data.success) {
-                        logSuccess(`Successfully applied ${data.events.length} events to calendar`);
-                        // Display success message and calendar link
-                        calendarPreview.innerHTML = `
-                            <div class="alert alert-success">
-                                <i class="bi bi-check-circle"></i>
-                                Successfully applied ${data.events.length} events to the calendar!
-                            </div>
-                            <div class="alert alert-info">
-                                <i class="bi bi-info-circle"></i>
-                                View your updated calendar at: 
-                                <a href="https://calendar.google.com" target="_blank" class="alert-link">calendar.google.com</a>
-                            </div>
-                            <div class="mt-3">
-                                <div class="table-responsive">
-                                    <table class="table table-sm">
-                                        <thead>
-                                            <tr>
-                                                <th>Date</th>
-                                                <th>Event</th>
-                                                <th>Location</th>
-                                                <th>Transportation</th>
-                                                <th>Release Time</th>
-                                                <th>Departure Time</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${data.events.map(event => `
-                                                <tr>
-                                                    <td>${event.formatted_date}</td>
-                                                    <td><strong>${event.summary}</strong></td>
-                                                    <td>${event.location}</td>
-                                                    <td>${event.transportation}</td>
-                                                    <td>${event.release_time}</td>
-                                                    <td>${event.departure_time}</td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        `;
-                        
-                        // Refresh the SLOHS calendars after successful individual sheet operation
-                        logInfo('🔄 Refreshing SLOHS calendars after successful sheet operation...');
-                        await loadSLOHSCalendars();
-                        logSuccess('✅ SLOHS calendars refreshed successfully');
-                        
-                    } else {
-                        logError(`Error applying changes: ${data.error}`);
-                        calendarPreview.innerHTML = `
-                            <div class="d-flex align-items-center justify-content-center h-100">
-                                <p class="text-danger">Error applying changes: ${data.error}</p>
-                            </div>
-                        `;
-                        
-                        // Display debug logs if available (even on error)
-                        if (data.debug_logs && data.debug_logs.length > 0) {
-                            renderServerLogs(data.debug_logs);
-                        }
-                    }
-                } catch (error) {
-                    logError(`Exception in apply changes: ${error.message || error}`);
-                    calendarPreview.innerHTML = `
-                        <div class="d-flex align-items-center justify-content-center h-100">
-                            <p class="text-danger">Error applying changes: ${error.message || error}</p>
-                        </div>
-                    `;
-                    // Re-enable preview button
-                    previewChangesBtn.disabled = false;
-                    // Keep apply button disabled until preview is run again
-                    applyChangesBtn.disabled = true;
-                }
-            });
-
-            function setCurrentSheetName(name) {
-                const el = document.getElementById('currentSheetName');
-                if (el) el.textContent = name ? `Sport: ${name}` : '';
+        // Display events
+        function displayEvents(events) {
+            const container = document.getElementById('events-container');
+            container.innerHTML = '';
+            
+            if (events.length === 0) {
+                container.innerHTML = '<p>No events found in this sheet.</p>';
+                return;
             }
-
-            // Load SLOHS calendars when page loads
-            async function loadSLOHSCalendars() {
-                try {
-                    const response = await fetch('/get_slohs_calendars');
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        displaySLOHSCalendars(data.calendars);
-                    } else {
-                        console.error('Error loading SLOHS calendars:', data.error);
-                    }
-                } catch (error) {
-                    console.error('Network error loading SLOHS calendars:', error);
-                }
-            }
-
-            function displaySLOHSCalendars(calendars) {
-                const calendarIndex = document.getElementById('calendarIndex');
-                if (!calendarIndex) return;
-
-                if (calendars.length === 0) {
-                    calendarIndex.innerHTML = `
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle"></i>
-                            No SLOHS calendars found. Create some calendars first!
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Sort calendars by name
-                calendars.sort((a, b) => a.name.localeCompare(b.name));
-
-                const calendarLinks = calendars.map(calendar => {
-                    const displayName = calendar.name.replace('SLOHS ', '');
-                    
-                    return `
-                        <div class="mb-2">
-                            <a href="https://calendar.google.com/calendar/embed?src=${encodeURIComponent(calendar.id)}" 
-                               target="_blank" 
-                               class="text-decoration-none">
-                                <i class="bi bi-calendar-event text-primary"></i>
-                                <strong>${displayName}</strong>
-                            </a>
-                        </div>
-                    `;
-                }).join('');
-
-                calendarIndex.innerHTML = `
-                    <div class="border rounded p-3 bg-light">
-                        <h6 class="mb-3">Subscribe to SLOHS Calendars:</h6>
-                        ${calendarLinks}
+            
+            events.forEach(event => {
+                const card = document.createElement('div');
+                card.className = 'card event-card';
+                card.innerHTML = `
+                    <div class="card-body">
+                        <h5 class="card-title">${event.summary}</h5>
+                        <p class="card-text">
+                            <strong>Start:</strong> ${new Date(event.start.dateTime).toLocaleString()}<br>
+                            <strong>End:</strong> ${new Date(event.end.dateTime).toLocaleString()}<br>
+                            <strong>Location:</strong> ${event.location}
+                        </p>
                     </div>
                 `;
+                container.appendChild(card);
+            });
+        }
+
+        // Handle applying changes
+        document.getElementById('apply-changes').addEventListener('click', async () => {
+            if (currentEvents.length === 0) {
+                showStatus('No events to apply', 'warning');
+                return;
             }
 
-            // Add filtering logic for debug log
-            const logLevelFilter = document.getElementById('logLevelFilter');
+            const calendarName = document.getElementById('calendar-name').value.trim();
+            if (!calendarName) {
+                showStatus('Please enter a calendar name', 'warning');
+                return;
+            }
 
-            function filterLogEntries() {
-                const selectedLevel = logLevelFilter.value;
-                const entries = debugLog.querySelectorAll('.log-entry');
-                entries.forEach(entry => {
-                    const levelSpan = entry.querySelector('.log-level');
-                    if (!levelSpan) return;
-                    const entryLevel = levelSpan.textContent.trim().toUpperCase();
-                    if (selectedLevel === 'ALL' || entryLevel === selectedLevel) {
-                        entry.style.display = '';
-                    } else {
-                        entry.style.display = 'none';
-                    }
+            try {
+                const response = await fetch('/apply_changes', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        events: currentEvents,
+                        calendar_name: calendarName
+                    })
                 });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(`Successfully added ${currentEvents.length} events to calendar "${calendarName}"`, 'success');
+                } else {
+                    showStatus(data.error, 'danger');
+                }
+            } catch (error) {
+                showStatus('Error applying changes: ' + error.message, 'danger');
             }
+        });
 
-            logLevelFilter.addEventListener('change', filterLogEntries);
+        // Utility function to show status messages
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status-messages');
+            statusDiv.textContent = message;
+            statusDiv.className = `alert alert-${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
 
-            // Patch log() to call filterLogEntries after adding a new entry
-            const originalLogWithJSON = logWithJSON;
-            logWithJSON = function(level, message) {
-                originalLogWithJSON(level, message);
-                filterLogEntries();
-            };
-
-            // On page load, filter to ALL
-            filterLogEntries();
-
+        // Handle sync trigger
+        document.getElementById('trigger-sync').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/trigger_sync');
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus('Sync triggered successfully!', 'success');
+                } else {
+                    showStatus('Error triggering sync: ' + data.error, 'danger');
+                }
+            } catch (error) {
+                showStatus('Error triggering sync: ' + error.message, 'danger');
+            }
         });
     </script>
 </body>

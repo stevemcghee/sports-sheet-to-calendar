@@ -1,3 +1,5 @@
+# DEPRECATED: This script is no longer used. The main web application is now in the root app.py file.
+
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -396,25 +398,7 @@ def apply_changes():
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
 
-import subprocess
 
-@app.route('/trigger_sync', methods=['GET', 'POST'])
-def trigger_sync():
-    try:
-        # Get the absolute path to the automated_sync.py script
-        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'automated_sync.py'))
-        
-        # Get the absolute path to the python executable in the venv
-        python_executable = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'))
-
-        # Start the sync script as a background process
-        subprocess.Popen([python_executable, script_path])
-        
-        return jsonify({'success': True, 'message': 'Sync triggered successfully!'})
-    except Exception as e:
-        logger.error(f"Error triggering sync: {str(e)}")
-        logger.error(traceback.format_exc())
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/logout')
 def logout():

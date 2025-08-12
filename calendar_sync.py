@@ -189,6 +189,35 @@ def parse_date(date_str):
     if 'week of' in date_str.lower() or ' or ' in date_str.lower():
         logger.debug(f"Rejecting date with invalid keywords: '{date_str}'")
         raise ValueError(f"Invalid date format: {date_str}")
+
+    # Handle date ranges like 9/5-6
+    shorthand_range_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})', date_str)
+    if shorthand_range_match:
+        month, start_day, end_day = map(int, shorthand_range_match.groups())
+        year = datetime.now().year
+        start_date = date(year, month, start_day)
+        end_date = date(year, month, end_day)
+        logger.debug(f"Parsed shorthand date range without year: {start_date} to {end_date}")
+        return start_date, end_date
+
+    # Handle date ranges like 8/4 - 8/7
+    full_range_match_no_year = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})', date_str)
+    if full_range_match_no_year:
+        start_month, start_day, end_month, end_day = map(int, full_range_match_no_year.groups())
+        year = datetime.now().year
+        start_date = datetime(year, start_month, start_day).date()
+        end_date = datetime(year, end_month, end_day).date()
+        logger.debug(f"Parsed full date range without year: {start_date} to {end_date}")
+        return start_date, end_date
+
+    # Handle date ranges like 8/4 - 8/7/2025
+    full_range_match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
+    if full_range_match:
+        start_month, start_day, end_month, end_day, year = map(int, full_range_match.groups())
+        start_date = datetime(year, start_month, start_day).date()
+        end_date = datetime(year, end_month, end_day).date()
+        logger.debug(f"Parsed full date range: {start_date} to {end_date}")
+        return start_date, end_date
     
     # Handle date ranges like 2/15-17/2025
     range_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)

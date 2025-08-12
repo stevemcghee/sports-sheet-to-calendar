@@ -1,11 +1,19 @@
-#!/usr/bin/env python3
-"""
-Automated Calendar Sync Script
-
-This script runs the calendar sync process and sends email notifications
-with detailed reports about what changed.
-"""
-
+import os
+import sys
+import logging
+import json
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+import traceback
+import pickle
+import html
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
 import os
 import sys
 import logging

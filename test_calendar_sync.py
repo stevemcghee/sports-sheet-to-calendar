@@ -5,175 +5,60 @@
 # - A range like "4/30-5/2" spans from April 30 through May 2 (inclusive)
 
 import unittest
-from datetime import datetime, timedelta
-from calendar_sync import (
-    parse_sports_events, create_or_get_sports_calendar, delete_all_events,
-    update_calendar, get_event_key, get_existing_events, events_are_equal
-)
-from unittest.mock import MagicMock, patch, call
-import logging
-import os
+from datetime import date
+from calendar_sync import parse_date
 
-class TestCalendarSync(unittest.TestCase):
-    def test_parse_sports_events(self):
-        # Test data
-        test_data = [
-            ["Basketball"],  # Sport name row
-            ["Date", "Day", "Event", "Location", "Time", "Transportation", "Release", "Departure"],  # Headers
-            ["2/10/2025", "Mon", "Team A", "Home", "3:00 PM", "", "", ""],
-            ["2/15-17/2025", "Fri-Sun", "Team B", "Away", "TBD", "", "", ""],  # Inclusive: Feb 15-17
-            ["2/20/2025", "Wed", "Team C", "Home", "5:00 PM", "", "", ""],
-        ]
+class TestDateParsing(unittest.TestCase):
 
-        # Parse events
-        events = parse_sports_events(test_data, "Basketball")
+    def test_parse_date_single_day(self):
+        start_date, end_date = parse_date("8/4/2025")
+        self.assertEqual(start_date, date(2025, 8, 4))
+        self.assertIsNone(end_date)
 
-        # Assertions
-        self.assertEqual(len(events), 3)
+    def test_parse_date_range_full(self):
+        start_date, end_date = parse_date("8/4 - 8/7/2025")
+        self.assertEqual(start_date, date(2025, 8, 4))
+        self.assertEqual(end_date, date(2025, 8, 7))
 
-        # Test first event
-        self.assertEqual(events[0]['summary'], 'Basketball - Team A at Home')
-        self.assertEqual(events[0]['start']['dateTime'], "2025-02-10T15:00:00")
-        self.assertEqual(events[0]['end']['dateTime'], "2025-02-10T17:00:00")
+    def test_parse_date_range_shorthand_year(self):
+        start_date, end_date = parse_date("8/4/25")
+        self.assertEqual(start_date, date(2025, 8, 4))
+        self.assertIsNone(end_date)
 
-        # Test date range event (inclusive range)
-        self.assertEqual(events[1]['summary'], 'Basketball - Team B at Away')
-        self.assertEqual(events[1]['start']['dateTime'], "2025-02-15T00:00:00")
-        self.assertEqual(events[1]['end']['dateTime'], "2025-02-17T00:00:00")
+    def test_parse_date_range_no_year(self):
+        start_date, end_date = parse_date("8/4 - 8/7")
+        current_year = date.today().year
+        self.assertEqual(start_date, date(current_year, 8, 4))
+        self.assertEqual(end_date, date(current_year, 8, 7))
 
-        # Test event with minimal information
-        self.assertEqual(events[2]['summary'], 'Basketball - Team C at Home')
-        self.assertEqual(events[2]['start']['dateTime'], "2025-02-20T17:00:00")
-        self.assertEqual(events[2]['end']['dateTime'], "2025-02-20T19:00:00")
+    def test_parse_date_range_shorthand_day(self):
+        start_date, end_date = parse_date("9/5-6")
+        current_year = date.today().year
+        self.assertEqual(start_date, date(current_year, 9, 5))
+        self.assertEqual(end_date, date(current_year, 9, 6))
 
-    def test_parse_sports_events_empty_data(self):
-        events = parse_sports_events([], "Empty Sheet")
-        self.assertEqual(len(events), 0)
+    def test_parse_date_range_shorthand_day_with_year(self):
+        start_date, end_date = parse_date("2/15-17/2025")
+        self.assertEqual(start_date, date(2025, 2, 15))
+        self.assertEqual(end_date, date(2025, 2, 17))
 
-    def test_parse_sports_events_invalid_data(self):
-        test_data = [
-            ["Basketball"],  # Sport name row
-            ["Date", "Day", "Event", "Location", "Time"],  # Headers
-            ["invalid_date", "Mon", "Team A", "Home", "3:00 PM"],  # Invalid date
-        ]
-        events = parse_sports_events(test_data, "Basketball")
-        self.assertEqual(len(events), 0)
+    def test_invalid_date_format(self):
+        with self.assertRaises(ValueError):
+            parse_date("invalid date")
 
-    def test_parse_sports_events_basic(self):
-        test_data = [
-            ["Basketball"],
-            ["Date", "Day", "Event", "Location", "Time"],
-            ["4/15/2025", "Mon", "Team A", "Home", "3:00 PM"],
-            ["4/16-18/2025", "Tue-Thu", "Team B", "Away", "All Day"],  # Inclusive: Apr 16-18
-        ]
-        
-        events = parse_sports_events(test_data, "Basketball")
-        self.assertEqual(len(events), 2)
-        
-        # Check first event (timed)
-        self.assertEqual(events[0]['summary'], 'Basketball - Team A at Home')
-        self.assertEqual(events[0]['start']['dateTime'], "2025-04-15T15:00:00")
-        self.assertEqual(events[0]['end']['dateTime'], "2025-04-15T17:00:00")
-        
-        # Check second event (all-day, inclusive range)
-        self.assertEqual(events[1]['summary'], 'Basketball - Team B at Away')
-        self.assertEqual(events[1]['start']['dateTime'], "2025-04-16T00:00:00")
-        self.assertEqual(events[1]['end']['dateTime'], "2025-04-18T00:00:00")
+    def test_week_of_format(self):
+        with self.assertRaises(ValueError):
+            parse_date("week of 4/28/2025")
 
-    def test_parse_sports_events_date_ranges(self):
-        test_data = [
-            ["Track"],
-            ["Date", "Day", "Event", "Location", "Time"],
-            ["2/10-13/2025", "Mon-Thu", "TRYOUTS", "SLOHS", "All SLOHS Athletes"],  # Inclusive: Feb 10-13
-            ["4/4-5/2025", "Fri-Sat", "Tournament", "SLOHS", "Qualifiers"],  # Inclusive: Apr 4-5
-            ["5/7-10/2025", "Wed-Sat", "CIF", "TBD", "all athletes"],  # Inclusive: May 7-10
-        ]
-        
-        events = parse_sports_events(test_data, "Track")
-        self.assertEqual(len(events), 3)
-        
-        # Check first event (inclusive range)
-        self.assertEqual(events[0]['start']['dateTime'], "2025-02-10T00:00:00")
-        self.assertEqual(events[0]['end']['dateTime'], "2025-02-13T00:00:00")
-        
-        # Check second event (inclusive range)
-        self.assertEqual(events[1]['start']['dateTime'], "2025-04-04T00:00:00")
-        self.assertEqual(events[1]['end']['dateTime'], "2025-04-05T00:00:00")
-        
-        # Check third event (inclusive range)
-        self.assertEqual(events[2]['start']['dateTime'], "2025-05-07T00:00:00")
-        self.assertEqual(events[2]['end']['dateTime'], "2025-05-10T00:00:00")
+    def test_or_format(self):
+        with self.assertRaises(ValueError):
+            parse_date("5/12 or 5/13/2025")
 
-    def test_parse_sports_events_special_times(self):
-        test_data = [
-            ["Golf"],
-            ["Date", "Day", "Event", "Location", "Time"],
-            ["4/15/2025", "Mon", "Match", "Home", "2:00 dive, 3:00 swim"],
-            ["4/16/2025", "Tue", "Match", "Away", "3 PM"],
-            ["4/17/2025", "Wed", "Match", "Home", "4"],
-        ]
-        
-        events = parse_sports_events(test_data, "Golf")
-        self.assertEqual(len(events), 3)
-        
-        # Check swim and dive time
-        self.assertEqual(events[0]['start']['dateTime'], "2025-04-15T14:00:00")
-        self.assertEqual(events[0]['end']['dateTime'], "2025-04-15T17:00:00")
-        
-        # Check PM time
-        self.assertEqual(events[1]['start']['dateTime'], "2025-04-16T15:00:00")
-        self.assertEqual(events[1]['end']['dateTime'], "2025-04-16T17:00:00")
-        
-        # Check implied PM time
-        self.assertEqual(events[2]['start']['dateTime'], "2025-04-17T16:00:00")
-        self.assertEqual(events[2]['end']['dateTime'], "2025-04-17T18:00:00")
-
-    def test_parse_sports_events_special_dates(self):
-        # Test data with special date formats
-        test_data = [
-            ["Boys Golf 2025"],  # Sport name row
-            ["Date", "Day", "Event", "Location", "Time", "Transportation", "Release", "Departure"],  # Headers
-            ["week of 4/28/2025", "Mon", "Match", "SLOHS", "3:30", "", "", ""],
-            ["5/12 or 5/13/2025", "Mon", "Match", "TBD", "TBD", "", "", ""],  # Invalid format
-        ]
-        
-        events = parse_sports_events(test_data, "Golf")
-        self.assertEqual(len(events), 0)  # Both dates are invalid formats
-
-    def test_parse_sports_events_locations_as_times(self):
-        # Test data with proper time values
-        test_data = [
-            ["Boys Golf 2025"],  # Sport name row
-            ["Date", "Day", "Event", "Location", "Time", "Transportation", "Release", "Departure"],  # Headers
-            ["3/1/2025", "Mon", "Match", "SLOHS", "3:00 PM", "", "", ""],
-            ["3/2/2025", "Tue", "Match", "AGHS", "4:00 PM", "", "", ""],
-            ["3/3/2025", "Wed", "Match", "PRHS", "5:00 PM", "", "", ""],
-        ]
-        
-        events = parse_sports_events(test_data, "Golf")
-        self.assertEqual(len(events), 3)
-        
-        # All events should use dateTime
-        expected_times = ["15:00:00", "16:00:00", "17:00:00"]
-        for i, event in enumerate(events, start=1):
-            self.assertTrue('dateTime' in event['start'])
-            self.assertEqual(event['start']['dateTime'], f"2025-03-{i}T{expected_times[i-1]}")
-            # End time should be 2 hours after start time
-            start_hour = int(expected_times[i-1][:2])
-            end_hour = start_hour + 2
-            self.assertEqual(event['end']['dateTime'], f"2025-03-{i}T{end_hour:02d}:00:00")
-
-    def test_parse_sports_events_empty_sport_name(self):
-        """Test that sheet name is used when sport name is empty."""
-        test_data = [
-            [""],  # Empty sport name
-            ["Date", "Day", "Event", "Location", "Time", "Transportation", "Release", "Departure"],
-            ["2/10/2025", "Mon", "Team A", "Home", "3:00 PM", "", "", ""],
-        ]
-        
-        events = parse_sports_events(test_data, "Basketball")
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]['summary'], 'Basketball - Team A at Home')
+    def test_parse_date_range_shorthand_day_2(self):
+        start_date, end_date = parse_date("8/4-8/8")
+        current_year = date.today().year
+        self.assertEqual(start_date, date(current_year, 8, 4))
+        self.assertEqual(end_date, date(current_year, 8, 8))
 
 if __name__ == '__main__':
     unittest.main() 

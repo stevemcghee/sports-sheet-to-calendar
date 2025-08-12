@@ -5,6 +5,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import load_dotenv
+import re
 
 # Load environment variables
 load_dotenv()
@@ -97,6 +98,68 @@ def get_spreadsheet_data(spreadsheet_id):
         logger.error(f"Unexpected error getting spreadsheet data: {e}")
         raise
 
+def parse_date(date_str):
+    """Parse a date string in MM/DD/YYYY format, or a range like 2/15-17/2025.
+    Returns (start_date, end_date) where end_date may be None for single dates."""
+    date_str = date_str.strip()
+    logger.debug(f"Parsing date string: '{date_str}'")
+    
+    # Reject invalid formats like "week of" or "or"
+    if 'week of' in date_str.lower() or ' or ' in date_str.lower():
+        logger.debug(f"Rejecting date with invalid keywords: '{date_str}'")
+        raise ValueError(f"Invalid date format: {date_str}")
+
+    # Handle date ranges like 8/4 - 8/7
+    full_range_match_no_year = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})', date_str)
+    if full_range_match_no_year:
+        start_month, start_day, end_month, end_day = map(int, full_range_match_no_year.groups())
+        year = datetime.now().year
+        start_date = datetime(year, start_month, start_day).date()
+        end_date = datetime(year, end_month, end_day).date()
+        logger.debug(f"Parsed full date range without year: {start_date} to {end_date}")
+        return start_date, end_date
+
+    # Handle date ranges like 8/4 - 8/7/2025
+    full_range_match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
+    if full_range_match:
+        start_month, start_day, end_month, end_day, year = map(int, full_range_match.groups())
+        start_date = datetime(year, start_month, start_day).date()
+        end_date = datetime(year, end_month, end_day).date()
+        logger.debug(f"Parsed full date range: {start_date} to {end_date}")
+        return start_date, end_date
+    
+    # Handle date ranges like 2/15-17/2025
+    range_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
+    if range_match:
+        month, start_day, end_day, year = map(int, range_match.groups())
+        start_date = datetime(year, month, start_day).date()
+        end_date = datetime(year, month, end_day).date()
+        logger.debug(f"Parsed date range: {start_date} to {end_date}")
+        return start_date, end_date
+    # Handle date ranges like 4/16-18/2025 (shorthand, no month on end)
+    shorthand_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
+    if shorthand_match:
+        month, start_day, end_day, year = map(int, shorthand_match.groups())
+        start_date = datetime(year, month, start_day).date()
+        end_date = datetime(year, month, end_day).date()
+        logger.debug(f"Parsed shorthand date range: {start_date} to {end_date}")
+        return start_date, end_date
+    # Handle normal MM/DD/YYYY or MM/DD/YY
+    try:
+        # First try MM/DD/YYYY format
+        d = datetime.strptime(date_str, "%m/%d/%Y").date()
+        logger.debug(f"Parsed single date: {d}")
+        return d, None
+    except ValueError:
+        try:
+            # Try MM/DD/YY format (2-digit year)
+            d = datetime.strptime(date_str, "%m/%d/%y").date()
+            logger.debug(f"Parsed single date (2-digit year): {d}")
+            return d, None
+        except Exception as e:
+            logger.debug(f"Failed to parse date '{date_str}': {str(e)}")
+            raise ValueError(f"Invalid date format: {date_str}")
+
 def parse_sports_events(sheet_data, sheet_name):
     """Parse sports events from sheet data."""
     events = []
@@ -166,7 +229,7 @@ def parse_sports_events(sheet_data, sheet_name):
                 continue
                 
             # Parse date
-            date_obj = datetime.strptime(date_str, '%m/%d/%Y')
+            start_date, end_date = parse_date(date_str)
             
             # Get other fields
             sport_name = row[sport_col].strip() if sport_col is not None and len(row) > sport_col else ""
@@ -212,13 +275,15 @@ def parse_sports_events(sheet_data, sheet_name):
                 "summary": f"{sport_name} - {event_name} at {location}",
                 "description": description,
                 "location": location,
-                "start": {
-                    "date": date_obj.strftime("%Y-%m-%d")
-                },
-                "end": {
-                    "date": (date_obj + timedelta(days=1)).strftime("%Y-%m-%d")
-                }
             }
+
+            if end_date:
+                event_dict["start"] = {"date": start_date.strftime("%Y-%m-%d")}
+                event_dict["end"] = {"date": (end_date + timedelta(days=1)).strftime("%Y-%m-%d")}
+            else:
+                event_dict["start"] = {"date": start_date.strftime("%Y-%m-%d")}
+                event_dict["end"] = {"date": (start_date + timedelta(days=1)).strftime("%Y-%m-%d")}
+
             
             # Add custom fields for additional data
             if transportation and transportation.strip():
@@ -244,6 +309,7 @@ def parse_sports_events(sheet_data, sheet_name):
             continue
     
     return events
+
 
 def get_calendar_events(calendar_id='primary'):
     """Get existing calendar events using service account."""
