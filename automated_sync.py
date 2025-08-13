@@ -239,7 +239,7 @@ class SyncReporter:
                 <p><strong>Success Rate:</strong> {summary['success_rate']:.1f}%</p>
                 <p><strong>Total Changes:</strong> {summary['total_changes']}</p>
             </div>
-        "
+        """
         
         # Add parsing errors section
         if self.sync_results['parsing_errors']:
@@ -250,7 +250,7 @@ class SyncReporter:
                 <div class="error">
                     <p><strong>Sheet:</strong> {error['sheet']}</p>
                     <p><strong>Error:</strong> {error['error']}</p>
-                    "
+                    """
                 if error.get('row_data'):
                     html_content += f"<p><strong>Row Data:</strong> {error['row_data']}</p>"
                 html_content += "</div>"
@@ -263,7 +263,7 @@ class SyncReporter:
                 html_content += f"""
                 <div class="sheet-detail">
                     <h3>{sheet_name} - {status}</h3>
-                ""
+                """
                 
                 if result.get('success'):
                     html_content += f"""
@@ -271,7 +271,7 @@ class SyncReporter:
                     <p><strong>Events Updated:</strong> {result.get('events_updated', 0)}</p>
                     <p><strong>Events Deleted:</strong> {result.get('events_deleted', 0)}</p>
                     <p><strong>Total Events:</strong> {result.get('total_events', 0)}</p>
-                    ""
+                    """
                     # Render diff for this sheet if available
                     diff_html = self._render_sheet_diff(sheet_name, result.get('details'))
                     if diff_html:
