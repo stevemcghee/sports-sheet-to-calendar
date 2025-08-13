@@ -1220,7 +1220,7 @@ def get_current_calendar():
 
 
 import subprocess
-
+from automated_sync import main as run_automated_sync
 @app.route('/routes')
 def list_routes():
     import urllib
@@ -1239,17 +1239,15 @@ def list_routes():
 
 @app.route('/trigger-sync', methods=['GET', 'POST'])
 def trigger_sync():
+    """
+    Triggers the automated sync process.
+    This endpoint is designed for non-interactive use (e.g., Cloud Scheduler).
+    """
     try:
-        if 'credentials' not in session:
-            return jsonify({'success': False, 'error': 'Not authenticated', 'needs_auth': True}), 401
-        # Get the absolute path to the automated_sync.py script
-        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'automated_sync.py'))
+        # Run the automated sync
+        run_automated_sync()
         
-        # Get the python executable path from the sys module
-        python_executable = sys.executable
-
-        # Start the sync script as a background process
-        subprocess.Popen([python_executable, script_path])
+        logger.info("Automated sync process triggered successfully.")
         
         return jsonify({'success': True, 'message': 'Sync triggered successfully!'})
     except Exception as e:
