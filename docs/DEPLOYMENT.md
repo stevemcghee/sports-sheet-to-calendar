@@ -49,7 +49,6 @@ Running the application on your local machine is ideal for development and testi
     ```env
     # .env
     SPREADSHEET_ID=your_google_spreadsheet_id
-    GEMINI_API_KEY=your_gemini_api_key
     FLASK_SECRET_KEY=a_strong_and_random_secret_key
 
     # Optional: For the web UI, you also need Google OAuth credentials
@@ -100,7 +99,7 @@ Google Cloud Run is the recommended platform for running the automated, schedule
         - **Location**: `/cloudbuild.yaml`.
 
 3.  **Configure Environment Variables**:
-    - In the Cloud Build trigger settings, under **Advanced > Substitution variables**, add the required environment variables for your application (e.g., `_FLASK_SECRET_KEY`, `_GEMINI_API_KEY`, `_SMTP_PASSWORD`).
+    # In the Cloud Build trigger settings, under **Advanced > Substitution variables**, add the required environment variables for your application (e.g., `_FLASK_SECRET_KEY`, `_SMTP_PASSWORD`).
     - The variable names must match those in `cloudbuild.yaml` (e.g., `_SPREADSHEET_ID`).
     - **Important**: For sensitive values, it is highly recommended to store them in **Secret Manager** and grant the Cloud Build service account access to them.
 

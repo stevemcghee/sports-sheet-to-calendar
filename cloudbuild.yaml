@@ -33,7 +33,7 @@ steps:
       - '--port'
       - '5000'
       - '--set-env-vars'
-      - '^||^SEND_EMAIL=$_SEND_EMAIL,SMTP_SERVER=$_SMTP_SERVER,SMTP_PORT=$_SMTP_PORT,SMTP_USERNAME=$_SMTP_USERNAME,SMTP_PASSWORD=$_SMTP_PASSWORD,FROM_EMAIL=$_FROM_EMAIL,TO_EMAIL=$_TO_EMAIL,USE_GEMINI=$_USE_GEMINI,LOG_LEVEL=$_LOG_LEVEL,TIMEZONE=$_TIMEZONE,SPREADSHEET_ID=$_SPREADSHEET_ID,GEMINI_API_KEY=$_GEMINI_API_KEY,FLASK_SECRET_KEY=$_FLASK_SECRET_KEY,GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$_GOOGLE_CLIENT_SECRET'
+      - '^||^SEND_EMAIL=$_SEND_EMAIL,SMTP_SERVER=$_SMTP_SERVER,SMTP_PORT=$_SMTP_PORT,SMTP_USERNAME=$_SMTP_USERNAME,SMTP_PASSWORD=$_SMTP_PASSWORD,FROM_EMAIL=$_FROM_EMAIL,TO_EMAIL=$_TO_EMAIL,LOG_LEVEL=$_LOG_LEVEL,TIMEZONE=$_TIMEZONE,SPREADSHEET_ID=$_SPREADSHEET_ID,FLASK_SECRET_KEY=$_FLASK_SECRET_KEY,GOOGLE_CLIENT_ID=$_GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$_GOOGLE_CLIENT_SECRET'
 
   # Update Cloud Scheduler job with new service URL
   - name: 'gcr.io/cloud-builders/gcloud'
@@ -71,7 +71,6 @@ timeout: '1200s'
 # Available substitutions
 substitutions:
   _SPREADSHEET_ID: ''
-  _GEMINI_API_KEY: ''
   _FLASK_SECRET_KEY: ''
   _GOOGLE_CLIENT_ID: ''
   _GOOGLE_CLIENT_SECRET: ''
@@ -82,7 +81,29 @@ substitutions:
   _SMTP_PASSWORD: ''
   _FROM_EMAIL: ''
   _TO_EMAIL: ''
-  _USE_GEMINI: 'true'
   _LOG_LEVEL: 'INFO'
   _TIMEZONE: 'America/Los_Angeles'
+
+# Notifications configuration
+notifications:
+  - notifier: 'projects/YOUR_PROJECT_ID/locations/us-central1/notifiers/YOUR_NOTIFIER_NAME'
+    filter: 'build.status == "SUCCESS" || build.status == "FAILURE"'
+    delivery:
+      template:
+        type: 'inline'
+        body: |
+          Build ${build.id} finished with status: ${build.status}
+          
+          Logs: ${build.logUrl}
+          
+          Summary:
+          - Trigger: ${build.substitutions.TRIGGER_NAME}
+          - Commit: ${build.substitutions.SHORT_SHA}
+          - Branch: ${build.substitutions.BRANCH_NAME}
+          - Repo: ${build.substitutions.REPO_NAME}
+          
+          Steps:
+          % for step in build.steps %
+          - ${step.name}: ${step.status}
+          % endfor %
  

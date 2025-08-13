@@ -6,7 +6,6 @@ All notable changes to the Google Calendar Sync project will be documented in th
 
 ### Added
 - **Web-based Admin Interface**: Complete Flask web application with interactive UI
-- **Dual Parser System**: Support for both traditional parsing and Gemini AI parsing
 - **Bulk Operations**: "APPLY ALL" feature to process all sheets simultaneously
 - **Real-time Event Preview**: View and verify events before syncing
 - **Enhanced Error Handling**: Comprehensive error handling with automatic fallback
@@ -19,7 +18,7 @@ All notable changes to the Google Calendar Sync project will be documented in th
 ### Changed
 - **Port Configuration**: Updated to use port 5000 by default with fallback options
 - **Authentication Flow**: Improved OAuth flow with better error handling
-- **Parser Architecture**: Modular parser system with AI and traditional options
+- **Parser Architecture**: Modular parser system
 - **Documentation**: Complete rewrite of all documentation files
 - **Docker Configuration**: Updated Dockerfile for web application deployment
 - **Gunicorn Configuration**: Optimized for web application performance
@@ -32,7 +31,6 @@ All notable changes to the Google Calendar Sync project will be documented in th
 
 ### Technical Details
 - **Framework**: Flask web application with Gunicorn production server
-- **AI Integration**: Google Gemini AI for intelligent spreadsheet parsing
 - **API Integration**: Google Sheets and Calendar APIs with OAuth2
 - **Deployment**: Support for Render, GCP Cloud Run, Docker, and local development
 - **Security**: Environment variable configuration, secure session management
@@ -61,7 +59,7 @@ All notable changes to the Google Calendar Sync project will be documented in th
 - Environment variables work for both interfaces
 
 ### From Old Web Interface
-- New dual parser system replaces single parser
+- New parser system replaces single parser
 - Enhanced authentication flow
 - Improved error handling and user feedback
 - Better deployment options and documentation
@@ -73,7 +71,6 @@ All notable changes to the Google Calendar Sync project will be documented in th
 - **Recurring Event Support**: Enhanced recurring event handling
 - **Batch Processing**: Improved bulk operations
 - **API Rate Limiting**: Better handling of Google API limits
-- **Enhanced AI Parsing**: More sophisticated AI parsing capabilities
 
 ### Technical Improvements
 - **Performance Optimization**: Faster processing for large spreadsheets

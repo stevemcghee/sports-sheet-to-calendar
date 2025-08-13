@@ -40,29 +40,7 @@ The HTML email includes:
 
 ---
 
-## 2. Dual Parser System
-
-The application features two different parsers for interpreting your Google Sheet data. You can choose the one that best fits your spreadsheet's format.
-
-### Traditional Parser
-
-- **Best for**: Structured, predictable data.
-- **Requires** a specific column order: `Date`, `Opponent`, `Location`, `Time`, etc.
-- **How it works**: It maps columns to event fields based on their position.
-- **Activation**: This is the default parser.
-
-### Gemini AI Parser
-
-- **Best for**: Less structured or complex data formats.
-- **Requires**: Column headers that are descriptive (e.g., "Start Time", "Event Description"). It does not rely on a fixed column order.
-- **How it works**: It uses the Google Gemini AI to understand the semantics of your spreadsheet and extract event data intelligently.
-- **Activation**: Set the environment variable `USE_GEMINI=true`.
-
-You can switch between parsers in the web UI to see which one works better for your data before syncing.
-
----
-
-## 3. Monitoring and Analytics
+## 2. Monitoring and Analytics
 
 The application includes a script to track sync history and visualize changes over time.
 

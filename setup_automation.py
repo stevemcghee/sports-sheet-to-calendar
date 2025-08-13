@@ -17,7 +17,6 @@ def check_environment():
     
     required_vars = [
         'SPREADSHEET_ID',
-        'GEMINI_API_KEY'
     ]
     
     optional_vars = [
@@ -26,7 +25,6 @@ def check_environment():
         'SMTP_PASSWORD',
         'TO_EMAIL',
         'SEND_EMAIL',
-        'USE_GEMINI'
     ]
     
     print("🔍 Checking environment configuration...")
@@ -97,9 +95,6 @@ def create_sample_env():
 # Required: Your Google Spreadsheet ID
 SPREADSHEET_ID=your-spreadsheet-id-here
 
-# Required: Your Gemini API key
-GEMINI_API_KEY=your-gemini-api-key-here
-
 # Optional: Email notification settings
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
@@ -110,7 +105,6 @@ TO_EMAIL=recipient@example.com
 
 # Sync configuration
 SEND_EMAIL=true
-USE_GEMINI=true
 
 # Flask secret key (for web app)
 FLASK_SECRET_KEY=your-secret-key-here

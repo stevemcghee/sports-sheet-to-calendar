@@ -12,6 +12,5 @@ region     = "us-central1"
 # Sensitive values - you must provide these
 smtp_password        = "your-smtp-password-here"
 flask_secret_key     = "your-flask-secret-key-here"
-gemini_api_key       = "your-gemini-api-key-here"
 google_client_id     = "your-google-client-id-here"
 google_client_secret = "your-google-client-secret-here" 

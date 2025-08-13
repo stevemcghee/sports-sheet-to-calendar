@@ -40,12 +40,6 @@ variable "flask_secret_key" {
   sensitive   = true
 }
 
-variable "gemini_api_key" {
-  description = "Gemini API key for AI parsing"
-  type        = string
-  sensitive   = true
-}
-
 variable "google_client_id" {
   description = "Google OAuth client ID"
   type        = string

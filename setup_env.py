@@ -58,11 +58,6 @@ def setup_env_file():
         "your-spreadsheet-id-here"
     )
     
-    gemini_api_key = get_user_input(
-        "Enter your Gemini API key",
-        "your-gemini-api-key-here"
-    )
-    
     flask_secret_key = generate_secret_key()
     print(f"Generated Flask secret key: {flask_secret_key}")
     
@@ -163,9 +158,6 @@ def setup_env_file():
 # Your Google Spreadsheet ID (required)
 SPREADSHEET_ID={spreadsheet_id}
 
-# Your Gemini API key (required for AI parsing)
-GEMINI_API_KEY={gemini_api_key}
-
 # Flask secret key for web sessions (required for web app)
 FLASK_SECRET_KEY={flask_secret_key}
 
@@ -183,13 +175,6 @@ SMTP_USERNAME={smtp_username}
 SMTP_PASSWORD={smtp_password}
 FROM_EMAIL={from_email}
 TO_EMAIL={to_email}
-
-# =============================================================================
-# SYNC CONFIGURATION (Optional)
-# =============================================================================
-
-# Use Gemini AI parser (true) or traditional parser (false)
-USE_GEMINI={use_gemini}
 
 # =============================================================================
 # GOOGLE CLOUD DEPLOYMENT SETTINGS (Optional)

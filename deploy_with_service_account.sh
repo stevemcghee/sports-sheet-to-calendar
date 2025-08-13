@@ -187,7 +187,6 @@ echo "   - Go to: https://console.cloud.google.com/run/detail/$REGION/$SERVICE_N
 echo "   - Click 'Edit & Deploy New Revision'"
 echo "   - Add your environment variables:"
 echo "     - SPREADSHEET_ID"
-echo "     - GEMINI_API_KEY"
 echo "     - FLASK_SECRET_KEY"
 echo "     - SMTP_* (for email notifications)"
 echo "     - SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_EMAIL"

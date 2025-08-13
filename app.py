@@ -16,10 +16,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 import pickle
 from dotenv import load_dotenv
-import google.generativeai as genai
 from google.auth.transport.requests import Request
 import pytz
-from gemini_parser import parse_sheet_with_gemini
 from googleapiclient.errors import HttpError
 
 # Load environment variables
@@ -45,34 +43,6 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/userinfo.email'
 ]
-
-# Configure Gemini
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if not GEMINI_API_KEY:
-    logger.warning("GEMINI_API_KEY not found in environment variables")
-genai.configure(api_key=GEMINI_API_KEY)
-
-# Configure safety settings
-safety_settings = [
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE",
-    },
-]
-
-model = genai.GenerativeModel('models/gemini-1.5-pro-latest', safety_settings=safety_settings)
 
 # Initialize Google Calendar service
 def get_calendar_service():
@@ -363,7 +333,6 @@ def check_auth():
     try:
         # Check both Google OAuth and Gemini API key
         has_google_auth = bool(session.get('credentials'))
-        has_gemini_key = bool(GEMINI_API_KEY)
         
         user_email = None
         if has_google_auth:
@@ -384,9 +353,8 @@ def check_auth():
         
         return jsonify({
             'authenticated': has_google_auth,
-            'has_gemini_key': has_gemini_key,
             'user_email': user_email,
-            'error': None if has_google_auth and has_gemini_key else 'Missing authentication'
+            'error': None if has_google_auth else 'Missing authentication'
         })
     except Exception as e:
         logger.error(f"Error checking auth status: {str(e)}")
@@ -424,7 +392,6 @@ def load_sheet():
         data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
         sheet_name = data.get('sheet_name')
-        use_traditional_parser = data.get('use_traditional_parser', False)
 
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'}), 400
@@ -495,18 +462,7 @@ def load_sheet():
 
             # Parse the events
             try:
-                if use_traditional_parser:
-                    events = parse_sports_events(values, sheet_name)
-                else:
-                    # Use Gemini parser
-                    logger.info("Starting Gemini parser analysis...")
-                    logger.info(f"Processing {len(values)} rows with Gemini")
-                    events = parse_sheet_with_gemini(values)
-                    logger.info(f"Gemini parser completed, found {len(events)} events")
-                    if not events:
-                        # If Gemini parser returns no events, try traditional parser as fallback
-                        logger.warning("Gemini parser returned no events, trying traditional parser")
-                        events = parse_sports_events(values, sheet_name)
+                events = parse_sports_events(values, sheet_name)
                     
                 if not events:
                     return jsonify({
@@ -514,7 +470,7 @@ def load_sheet():
                         'spreadsheet_title': spreadsheet_title,
                         'events': [],
                         'message': 'No events found in sheet',
-                        'parser_used': 'traditional' if use_traditional_parser else 'gemini',
+                        'parser_used': 'traditional',
                         'sheets': sheets,
                         'debug_logs': capture_handler.logs
                     })
@@ -523,7 +479,7 @@ def load_sheet():
                     'success': True,
                     'spreadsheet_title': spreadsheet_title,
                     'events': events,
-                    'parser_used': 'traditional' if use_traditional_parser else 'gemini',
+                    'parser_used': 'traditional',
                     'sheets': sheets,
                     'debug_logs': capture_handler.logs
                 })
@@ -572,7 +528,6 @@ def preview_changes():
         data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
         sheet_name = data.get('sheet_name')
-        use_traditional_parser = data.get('use_traditional_parser', False)  # Default to Gemini
 
         if not spreadsheet_id or not sheet_name:
             return jsonify({'success': False, 'error': 'Spreadsheet ID and sheet name are required'})
@@ -588,23 +543,8 @@ def preview_changes():
             return jsonify({'success': False, 'error': 'No data found in sheet'})
 
         # Parse events using either Gemini or traditional parser
-        if use_traditional_parser:
-            logger.info("Using traditional parser")
-            events = parse_sports_events(values, sheet_name)
-        else:
-            logger.info("Using Gemini parser")
-            logger.info(f"Processing {len(values)} rows with Gemini")
-            try:
-                events = parse_sheet_with_gemini(values)
-                logger.info(f"Gemini parser completed, found {len(events)} events")
-                if not events:
-                    logger.warning("Gemini parser returned no events, falling back to traditional parser")
-                    events = parse_sports_events(values, sheet_name)
-            except Exception as e:
-                logger.error(f"Error using Gemini parser: {str(e)}")
-                logger.error(traceback.format_exc())
-                logger.info("Falling back to traditional parser")
-                events = parse_sports_events(values, sheet_name)
+        logger.info("Using traditional parser")
+        events = parse_sports_events(values, sheet_name)
 
         # Get existing events
         # Handle special case for "All Sports"
@@ -651,7 +591,7 @@ def preview_changes():
         return jsonify({
             'success': True,
             'changes': changes,
-            'parser_used': 'traditional' if use_traditional_parser else 'gemini'
+            'parser_used': 'traditional'
         })
 
     except Exception as e:
@@ -687,7 +627,6 @@ def apply_changes():
         data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
         sheet_name = data.get('sheet_name')
-        use_traditional_parser = data.get('use_traditional_parser', False)
 
         if not spreadsheet_id or not sheet_name:
             return jsonify({'success': False, 'error': 'Spreadsheet ID and sheet name are required'})
@@ -697,7 +636,6 @@ def apply_changes():
         logger.info(f"Received data: {data}")
         logger.info(f"Spreadsheet ID: {spreadsheet_id}")
         logger.info(f"Sheet name: {sheet_name}")
-        logger.info(f"Use traditional parser: {use_traditional_parser}")
         service = get_calendar_service()
         
         # Handle special case for "All Sports"
@@ -720,23 +658,8 @@ def apply_changes():
             return jsonify({'success': False, 'error': 'No data found in sheet'})
 
         # Parse events using either Gemini or traditional parser
-        if use_traditional_parser:
-            logger.info("Using traditional parser")
-            events = parse_sports_events(values, sheet_name)
-        else:
-            logger.info("Using Gemini parser")
-            logger.info(f"Processing {len(values)} rows with Gemini")
-            try:
-                events = parse_sheet_with_gemini(values)
-                logger.info(f"Gemini parser completed, found {len(events)} events")
-                if not events:
-                    logger.warning("Gemini parser returned no events, falling back to traditional parser")
-                    events = parse_sports_events(values, sheet_name)
-            except Exception as e:
-                logger.error(f"Error using Gemini parser: {str(e)}")
-                logger.error(traceback.format_exc())
-                logger.info("Falling back to traditional parser")
-                events = parse_sports_events(values, sheet_name)
+        logger.info("Using traditional parser")
+        events = parse_sports_events(values, sheet_name)
         
         logger.info(f"Found {len(events)} events to apply")
         
@@ -910,7 +833,6 @@ def apply_all_sheets():
     try:
         data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
-        use_traditional_parser = data.get('use_traditional_parser', False)
 
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
@@ -956,20 +878,8 @@ def apply_all_sheets():
                     continue
                 
                 # Parse events
-                if use_traditional_parser:
-                    logger.info(f"Using traditional parser for {sheet_name}")
-                    events = parse_sports_events(values, sheet_name)
-                else:
-                    logger.info(f"Using Gemini parser for {sheet_name}")
-                    try:
-                        events = parse_sheet_with_gemini(values)
-                        if not events:
-                            logger.warning(f"Gemini parser returned no events for {sheet_name}, falling back to traditional parser")
-                            events = parse_sports_events(values, sheet_name)
-                    except Exception as e:
-                        logger.error(f"Error using Gemini parser for {sheet_name}: {str(e)}")
-                        logger.info(f"Falling back to traditional parser for {sheet_name}")
-                        events = parse_sports_events(values, sheet_name)
+                logger.info(f"Using traditional parser for {sheet_name}")
+                events = parse_sports_events(values, sheet_name)
                 
                 if not events:
                     logger.warning(f"No events found in sheet: {sheet_name}")
@@ -1077,7 +987,6 @@ def apply_all_to_master_calendar():
     try:
         data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
-        use_traditional_parser = data.get('use_traditional_parser', False)
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
         logger.info("Starting apply_all_to_master_calendar route")
@@ -1090,19 +999,10 @@ def apply_all_to_master_calendar():
             return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'})
         all_events = []
         for sheet_name in available_sheets:
-            values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
+            values = get_spreadsheet_data(sheets_.service, spreadsheet_id, sheet_name)
             if not values:
                 continue
-            if use_traditional_parser:
-                events = parse_sports_events(values, sheet_name)
-            else:
-                try:
-                    events = parse_sheet_with_gemini(values)
-                    if not events:
-                        events = parse_sports_events(values, sheet_name)
-                except Exception as e:
-                    logger.error(f"Error using Gemini parser for {sheet_name}: {str(e)}")
-                    events = parse_sports_events(values, sheet_name)
+            events = parse_sports_events(values, sheet_name)
             if events:
                 all_events.extend(events)
         # Create or get the 'SLOHS All Sports' calendar
@@ -1147,7 +1047,6 @@ def preview_all_sheets():
     try:
         data = request.get_json()
         spreadsheet_id = data.get('spreadsheet_id')
-        use_traditional_parser = data.get('use_traditional_parser', False)
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
         logger.info("Starting preview_all_sheets route")
@@ -1162,16 +1061,7 @@ def preview_all_sheets():
             values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
             if not values:
                 continue
-            if use_traditional_parser:
-                events = parse_sports_events(values, sheet_name)
-            else:
-                try:
-                    events = parse_sheet_with_gemini(values)
-                    if not events:
-                        events = parse_sports_events(values, sheet_name)
-                except Exception as e:
-                    logger.error(f"Error using Gemini parser for {sheet_name}: {str(e)}")
-                    events = parse_sports_events(values, sheet_name)
+            events = parse_sports_events(values, sheet_name)
             if events:
                 all_events.extend(events)
         logger.info(f"Preview: Found {len(all_events)} events from all sheets")

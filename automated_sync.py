@@ -35,7 +35,6 @@ from calendar_sync import (
     create_or_get_sports_calendar, update_calendar, get_existing_events,
     events_are_equal, list_available_sheets, get_event_key
 )
-from gemini_parser import parse_sheet_with_gemini
 
 # Load environment variables
 load_dotenv()
@@ -240,7 +239,7 @@ class SyncReporter:
                 <p><strong>Success Rate:</strong> {summary['success_rate']:.1f}%</p>
                 <p><strong>Total Changes:</strong> {summary['total_changes']}</p>
             </div>
-        """
+        "
         
         # Add parsing errors section
         if self.sync_results['parsing_errors']:
@@ -251,7 +250,7 @@ class SyncReporter:
                 <div class="error">
                     <p><strong>Sheet:</strong> {error['sheet']}</p>
                     <p><strong>Error:</strong> {error['error']}</p>
-                    """
+                    "
                 if error.get('row_data'):
                     html_content += f"<p><strong>Row Data:</strong> {error['row_data']}</p>"
                 html_content += "</div>"
@@ -264,7 +263,7 @@ class SyncReporter:
                 html_content += f"""
                 <div class="sheet-detail">
                     <h3>{sheet_name} - {status}</h3>
-                """
+                ""
                 
                 if result.get('success'):
                     html_content += f"""
@@ -272,7 +271,7 @@ class SyncReporter:
                     <p><strong>Events Updated:</strong> {result.get('events_updated', 0)}</p>
                     <p><strong>Events Deleted:</strong> {result.get('events_deleted', 0)}</p>
                     <p><strong>Total Events:</strong> {result.get('total_events', 0)}</p>
-                    """
+                    ""
                     # Render diff for this sheet if available
                     diff_html = self._render_sheet_diff(sheet_name, result.get('details'))
                     if diff_html:
@@ -343,7 +342,7 @@ def get_google_credentials():
         logger.error(f"Error loading default service account credentials: {e}")
         return None
 
-def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_gemini=True, reporter=None):
+def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, reporter=None):
     """Sync a single sheet and return results."""
     try:
         logger.info(f"Processing sheet: {sheet_name}")
@@ -376,17 +375,7 @@ def sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_g
         
         try:
             # Parse events
-            if use_gemini:
-                try:
-                    events = parse_sheet_with_gemini(values)
-                    if not events:
-                        logger.warning(f"Gemini parser returned no events for {sheet_name}, falling back to traditional parser")
-                        events = parse_sports_events(values, sheet_name)
-                except Exception as e:
-                    logger.error(f"Error using Gemini parser for {sheet_name}: {e}")
-                    events = parse_sports_events(values, sheet_name)
-            else:
-                events = parse_sports_events(values, sheet_name)
+            events = parse_sports_events(values, sheet_name)
         finally:
             # Remove the custom handler
             root_logger.removeHandler(error_handler)
@@ -529,8 +518,6 @@ def main():
         send_failure_email("Missing SPREADSHEET_ID environment variable")
         return False
     
-    # Force use_gemini to False for faster processing
-    use_gemini = False
     send_email = os.getenv('SEND_EMAIL', 'true').lower() == 'true'
     to_email = os.getenv('TO_EMAIL')
     
@@ -565,7 +552,7 @@ def main():
     
     # Process each sheet
     for sheet_name in available_sheets:
-        result = sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, use_gemini, reporter)
+        result = sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name, reporter)
         reporter.add_sheet_result(sheet_name, result)
     
     # Generate summary

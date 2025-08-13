@@ -23,7 +23,6 @@ def check_required_vars():
     """Check required environment variables."""
     required_vars = {
         'SPREADSHEET_ID': 'Your Google Spreadsheet ID',
-        'GEMINI_API_KEY': 'Your Gemini API key',
         'FLASK_SECRET_KEY': 'Flask secret key for web sessions'
     }
     
@@ -70,7 +69,6 @@ def check_email_config():
 def check_optional_vars():
     """Check optional environment variables."""
     optional_vars = {
-        'USE_GEMINI': 'Use Gemini AI parser (default: true)',
         'SEND_EMAIL': 'Enable email notifications (default: true)',
         'LOG_LEVEL': 'Logging level (default: INFO)',
         'TIMEZONE': 'Timezone (default: America/Los_Angeles)'

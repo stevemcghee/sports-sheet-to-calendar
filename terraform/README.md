@@ -21,8 +21,6 @@ cp terraform.tfvars.example terraform.tfvars
 Edit `terraform.tfvars` and provide the following sensitive values:
 - `smtp_password` - Your Gmail app password
 - `flask_secret_key` - A secure random string for Flask sessions
-- `gemini_api_key` - Your Gemini API key
-- `google_client_id` - Your Google OAuth client ID
 - `google_client_secret` - Your Google OAuth client secret
 
 ### 2. Build and push the Docker image
@@ -82,7 +80,6 @@ terraform apply
 All environment variables are configured in the Terraform configuration, including:
 - SMTP settings for email notifications
 - Google OAuth credentials
-- Gemini API key
 - Spreadsheet ID
 - Flask secret key
 

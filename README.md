@@ -7,7 +7,6 @@ This project automates the synchronization of events from a Google Spreadsheet t
 ## Core Features
 
 - **Web Interface**: An intuitive UI to preview and sync spreadsheet data interactively.
-- **Dual-Parser System**: Choose between a standard, column-based parser or an intelligent, AI-powered parser using Google Gemini.
 - **Automated Syncing**: Scripts designed to be run on a schedule (e.g., hourly) for hands-off synchronization.
 - **Flexible Deployment**: Deploy locally, using Docker, or on cloud platforms like Render and Google Cloud Run.
 - **Cross-Account Support**: Sync calendars between different Google accounts using either calendar sharing or a service account.
@@ -34,7 +33,6 @@ Next, you'll need to configure your environment variables. Create a `.env` file 
 ```env
 # .env - Example configuration
 SPREADSHEET_ID=your_google_spreadsheet_id
-GEMINI_API_KEY=your_gemini_api_key
 FLASK_SECRET_KEY=a_strong_and_random_secret_key
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your_google_client_secret

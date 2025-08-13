@@ -21,11 +21,6 @@ def parse_sports_events(values, sheet_name):
     # For the sake of this example, we'll use a placeholder
     return []
 
-def parse_sheet_with_gemini(values):
-    # This function should return a list of events parsed using Gemini
-    # For the sake of this example, we'll use a placeholder
-    return []
-
 def create_or_get_sports_calendar(calendar_service, sheet_name):
     # This function should return the ID of the sports calendar
     # For the sake of this example, we'll use a placeholder
@@ -45,7 +40,6 @@ def main():
     parser = argparse.ArgumentParser(description='Sync Google Calendar with sports schedule')
     parser.add_argument('--spreadsheet-id', required=True, help='Google Sheets spreadsheet ID')
     parser.add_argument('--sheet-name', required=True, help='Name of the sheet to sync')
-    parser.add_argument('--use-traditional-parser', action='store_true', help='Use traditional parser instead of Gemini')
     args = parser.parse_args()
 
     try:
@@ -61,20 +55,8 @@ def main():
             return
 
         # Parse events using either Gemini or traditional parser
-        if args.use_traditional_parser:
-            print("Using traditional parser")
-            events = parse_sports_events(values, args.sheet_name)
-        else:
-            print("Using Gemini parser")
-            try:
-                events = parse_sheet_with_gemini(values)
-                if not events:
-                    print("Gemini parser returned no events, falling back to traditional parser")
-                    events = parse_sports_events(values, args.sheet_name)
-            except Exception as e:
-                print(f"Error using Gemini parser: {str(e)}")
-                print("Falling back to traditional parser")
-                events = parse_sports_events(values, args.sheet_name)
+        print("Using traditional parser")
+        events = parse_sports_events(values, args.sheet_name)
 
         # Get existing events
         calendar_id = create_or_get_sports_calendar(calendar_service, args.sheet_name)

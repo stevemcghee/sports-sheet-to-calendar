@@ -80,11 +80,6 @@ resource "google_cloud_run_v2_service" "calendar_sync" {
       }
       
       env {
-        name  = "USE_GEMINI"
-        value = "true"
-      }
-      
-      env {
         name  = "SPREADSHEET_ID"
         value = var.spreadsheet_id
       }
@@ -92,11 +87,6 @@ resource "google_cloud_run_v2_service" "calendar_sync" {
       env {
         name  = "FLASK_SECRET_KEY"
         value = var.flask_secret_key
-      }
-      
-      env {
-        name  = "GEMINI_API_KEY"
-        value = var.gemini_api_key
       }
       
       env {
