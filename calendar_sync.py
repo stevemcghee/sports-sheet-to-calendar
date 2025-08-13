@@ -271,15 +271,34 @@ def parse_time(time_str):
     return dtime(hour=hour, minute=minute)
 
 def parse_date_range(date_str):
-    """Parse a date range string (e.g., '2/15-17/2025')."""
+    """Parse a date range string (e.g., '2/15-17/2025', '7/28-8/1/2025', '12/28/2024-1/5/2025')."""
+    date_str = date_str.strip()
+    
+    # Case 1: Full start and end dates with year (e.g., "12/28/2024-1/5/2025")
+    match = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
+    if match:
+        start_month, start_day, start_year, end_month, end_day, end_year = map(int, match.groups())
+        start_date = date(start_year, start_month, start_day)
+        end_date = date(end_year, end_month, end_day)
+        return start_date, end_date
+
+    # Case 2: Month/Day-Month/Day/Year (e.g., "7/28-8/1/2025")
+    match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
+    if match:
+        start_month, start_day, end_month, end_day, year = map(int, match.groups())
+        start_date = date(year, start_month, start_day)
+        end_date = date(year, end_month, end_day)
+        return start_date, end_date
+
+    # Case 3: Month/Day-Day/Year (e.g., "2/15-17/2025")
     match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
-    if not match:
-        raise ValueError(f"Invalid date range format: {date_str}")
-        
-    month, start_day, end_day, year = map(int, match.groups())
-    start_date = datetime(year, month, start_day).date()
-    end_date = datetime(year, month, end_day).date()
-    return start_date, end_date
+    if match:
+        month, start_day, end_day, year = map(int, match.groups())
+        start_date = date(year, month, start_day)
+        end_date = date(year, month, end_day)
+        return start_date, end_date
+
+    raise ValueError(f"Invalid date range format: {date_str}")
 
 def format_date(date_str):
     """Format date string to YYYY-MM-DD format."""
