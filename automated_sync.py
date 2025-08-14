@@ -1,40 +1,25 @@
-import os
-import sys
-import logging
-import json
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
-import traceback
-import pickle
 import html
+import json
+import logging
+import os
+import pickle
+import smtplib
+import sys
+import traceback
+from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+from dotenv import load_dotenv
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
-from google.auth.exceptions import RefreshError
-import os
-import sys
-import logging
-import json
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
-from dotenv import load_dotenv
-import traceback
-import pickle
-import html
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
-from google.auth.exceptions import RefreshError
+
 from calendar_sync import (
-    get_spreadsheet_data, parse_sports_events,
-    create_or_get_sports_calendar, update_calendar, get_existing_events,
-    events_are_equal, list_available_sheets, get_event_key
-)
+    create_or_get_sports_calendar, events_are_equal, get_event_key,
+    get_existing_events, get_spreadsheet_data, list_available_sheets,
+    parse_sports_events, update_calendar)
 
 # Load environment variables
 load_dotenv()
@@ -509,6 +494,7 @@ def send_failure_email(error_title: str, error_details: str | Exception | None =
 
 def main():
     """Main function to run the automated sync."""
+    logger.info("Automated sync main function called")
     logger.info("Starting automated calendar sync")
     
     # Get configuration

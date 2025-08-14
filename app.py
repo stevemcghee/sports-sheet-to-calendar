@@ -1243,15 +1243,15 @@ def trigger_sync():
     Triggers the automated sync process.
     This endpoint is designed for non-interactive use (e.g., Cloud Scheduler).
     """
+    logger.info("trigger_sync called")
+    logger.info("Sync triggered")
     try:
-        # Run the automated sync
+        logger.info("Calling run_automated_sync")
         run_automated_sync()
-        
-        logger.info("Automated sync process triggered successfully.")
-        
+        logger.info("Automated sync process finished successfully.")
         return jsonify({'success': True, 'message': 'Sync triggered successfully!'})
     except Exception as e:
-        logger.error(f"Error triggering sync: {str(e)}")
+        logger.error(f"Error in trigger_sync: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)}), 500
 

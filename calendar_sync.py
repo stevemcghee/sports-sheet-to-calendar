@@ -17,6 +17,7 @@ import calendar
 from dataclasses import dataclass
 import traceback
 import pandas as pd
+import pytz
 
 # Load environment variables
 load_dotenv()
@@ -397,6 +398,14 @@ def extract_first_time(time_str):
 
 def parse_sports_events(data, sheet_name=None):
     """Parse sports events from list data."""
+    try:
+        tz_str = os.getenv('TIMEZONE', 'America/Los_Angeles')
+        local_tz = pytz.timezone(tz_str)
+    except pytz.UnknownTimeZoneError:
+        logger.error(f"Unknown timezone: '{tz_str}'. Defaulting to America/Los_Angeles.")
+        tz_str = 'America/Los_Angeles'
+        local_tz = pytz.timezone(tz_str)
+
     if not data or len(data) < 2:  # Need at least headers and one event
         logger.warning(f"Not enough data rows: {len(data) if data else 0}")
         return []
@@ -581,16 +590,17 @@ def parse_sports_events(data, sheet_name=None):
                 description = "\n".join(description_parts)
                 
                 event_dict = {
-                    "summary": f"{sport_name} - {event} at {location}",
+                    "summary": f"{event}",
                     "description": description,
                     "location": location,
                 }
 
                 if parsed_time:
-                    start_datetime = datetime.combine(start_date, parsed_time)
-                    end_datetime = start_datetime + timedelta(hours=2)
-                    event_dict["start"] = {"dateTime": start_datetime.isoformat(), "timeZone": "America/Los_Angeles"}
-                    event_dict["end"] = {"dateTime": end_datetime.isoformat(), "timeZone": "America/Los_Angeles"}
+                    start_datetime_naive = datetime.combine(start_date, parsed_time)
+                    start_datetime_aware = local_tz.localize(start_datetime_naive)
+                    end_datetime_aware = start_datetime_aware + timedelta(hours=2)
+                    event_dict["start"] = {"dateTime": start_datetime_aware.isoformat(), "timeZone": tz_str}
+                    event_dict["end"] = {"dateTime": end_datetime_aware.isoformat(), "timeZone": tz_str}
                 else:
                     event_dict["start"] = {"date": start_date.strftime("%Y-%m-%d")}
                     event_dict["end"] = {"date": end_date_for_calendar.strftime("%Y-%m-%d")}
@@ -846,7 +856,7 @@ def delete_all_events(service, calendar_id):
         logger.info(f"Found {total_events} events to delete")
         
         for event in events:
-            logger.debug(f"Deleting event: {event.get('summary', 'No title')}")
+            logger.info(f"Deleting event: {event.get('summary', 'No title')}")
             service.events().delete(calendarId=calendar_id, eventId=event['id']).execute()
             
         logger.info("Successfully deleted all events from calendar")
@@ -955,7 +965,7 @@ def get_event_key(event):
     if 'dateTime' in start:
         # For datetime events, keep the full datetime string
         dt = parser.isoparse(start['dateTime'])
-        start_str = dt.astimezone(pytz.timezone('America/Los_Angeles')).date().isoformat()
+        start_str = dt.astimezone(pytz.utc).isoformat()
     elif 'date' in start:
         start_str = start['date']
     else:
@@ -975,24 +985,18 @@ def events_are_equal(event1, event2):
     start1 = event1.get('start', {})
     start2 = event2.get('start', {})
     
-    # Handle datetime vs date comparison
-    if ('dateTime' in start1 and 'date' in start2) or ('date' in start1 and 'dateTime' in start2):
-        date1 = start1.get('date') or start1['dateTime'].split('T')[0]
-        date2 = start2.get('date') or start2['dateTime'].split('T')[0]
-        if date1 != date2:
-            return False
-    elif 'dateTime' in start1 and 'dateTime' in start2:
+    if ('dateTime' in start1 and 'dateTime' in start2):
         dt1 = parser.isoparse(start1['dateTime'])
         dt2 = parser.isoparse(start2['dateTime'])
         if dt1.astimezone(pytz.utc) != dt2.astimezone(pytz.utc):
             return False
-    elif 'date' in start1 and 'date' in start2:
+    elif ('date' in start1 and 'date' in start2):
         if start1['date'] != start2['date']:
             return False
     else:
         # One is date and one is datetime - compare just the date portion
-        date1 = start1.get('date') or start1['dateTime'].split('T')[0]
-        date2 = start2.get('date') or start2['dateTime'].split('T')[0]
+        date1 = start1.get('date') or parser.isoparse(start1['dateTime']).date().isoformat()
+        date2 = start2.get('date') or parser.isoparse(start2['dateTime']).date().isoformat()
         if date1 != date2:
             return False
         
@@ -1000,24 +1004,18 @@ def events_are_equal(event1, event2):
     end1 = event1.get('end', {})
     end2 = event2.get('end', {})
     
-    # Handle datetime vs date comparison
-    if ('dateTime' in end1 and 'date' in end2) or ('date' in end1 and 'dateTime' in end2):
-        date1 = end1.get('date') or end1['dateTime'].split('T')[0]
-        date2 = end2.get('date') or end2['dateTime'].split('T')[0]
-        if date1 != date2:
-            return False
-    elif 'dateTime' in end1 and 'dateTime' in end2:
+    if ('dateTime' in end1 and 'dateTime' in end2):
         dt1 = parser.isoparse(end1['dateTime'])
         dt2 = parser.isoparse(end2['dateTime'])
         if dt1.astimezone(pytz.utc) != dt2.astimezone(pytz.utc):
             return False
-    elif 'date' in end1 and 'date' in end2:
+    elif ('date' in end1 and 'date' in end2):
         if end1['date'] != end2['date']:
             return False
     else:
         # One is date and one is datetime - compare just the date portion
-        date1 = end1.get('date') or end1['dateTime'].split('T')[0]
-        date2 = end2.get('date') or end2['dateTime'].split('T')[0]
+        date1 = end1.get('date') or parser.isoparse(end1['dateTime']).date().isoformat()
+        date2 = end2.get('date') or parser.isoparse(end2['dateTime']).date().isoformat()
         if date1 != date2:
             return False
         
@@ -1075,47 +1073,8 @@ def update_calendar(service, events, calendar_id, return_detailed_changes: bool 
         logger.info(f"Processing {len(events)} events for calendar {calendar_id}")
         
         # Get existing events
-        existing_events = get_existing_events(service, calendar_id)
-        logger.info(f"Found {len(existing_events)} existing events")
-        
-        # Convert existing events to list if it's a dictionary
-        if isinstance(existing_events, dict):
-            logger.debug("Converting existing events from dict to list")
-            existing_events = list(existing_events.values())
-        
-        # Create a dictionary of existing events for easy lookup
-        existing_events_dict = {}
-        for event in existing_events:
-            try:
-                if not isinstance(event, dict):
-                    logger.error(f"Invalid event format in existing events: {event}")
-                    continue
-                    
-                if 'start' not in event or 'end' not in event:
-                    logger.error(f"Event missing start/end times: {event}")
-                    continue
-                    
-                if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
-                    logger.error(f"Invalid start/end format in event: {event}")
-                    logger.error(f"Start type: {type(event['start'])}")
-                    logger.error(f"End type: {type(event['end'])}")
-                    continue
-                    
-                # Check for either dateTime or date fields (handle both timed and all-day events)
-                if ('dateTime' not in event['start'] and 'date' not in event['start']) or ('dateTime' not in event['end'] and 'date' not in event['end']):
-                    logger.error(f"Event missing dateTime or date in start/end: {event}")
-                    logger.error(f"Start: {event['start']}")
-                    logger.error(f"End: {event['end']}")
-                    continue
-                    
-                event_key = get_event_key(event)
-                existing_events_dict[event_key] = event
-                logger.debug(f"Added existing event to dictionary: {event_key}")
-            except Exception as e:
-                logger.error(f"Error processing existing event: {str(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-                continue
+        existing_events_dict = get_existing_events(service, calendar_id)
+        logger.info(f"Found {len(existing_events_dict)} existing events")
         
         # Process each event
         events_to_keep = set()
@@ -1206,12 +1165,15 @@ def update_calendar(service, events, calendar_id, return_detailed_changes: bool 
                 continue
         
         # Find events to delete
-        for event_key in existing_events_dict:
-            if event_key not in events_to_keep:
-                logger.debug(f"Event to delete: {event_key}")
-                events_to_delete.add(event_key)
-                if return_detailed_changes:
-                    deleted_events.append(existing_events_dict[event_key])
+        existing_keys = set(existing_events_dict.keys())
+        keys_to_keep = set(events_to_keep)
+        keys_to_delete = existing_keys - keys_to_keep
+        
+        for event_key in keys_to_delete:
+            logger.debug(f"Event to delete: {event_key}")
+            events_to_delete.add(event_key)
+            if return_detailed_changes:
+                deleted_events.append(existing_events_dict[event_key])
         
         # Apply changes
         logger.info(f"Applying changes: {len(events_to_insert)} to insert, {len(events_to_change)} to update, {len(events_to_delete)} to delete")
