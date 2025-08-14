@@ -24,7 +24,7 @@ class TestTimezoneHandling(unittest.TestCase):
         # This time is 11 PM on Sep 6th in Los Angeles
         existing_event = {
             'id': '12345',
-            'summary': 'Flag Football 2025 - King City at King City (JV and V)',
+            'summary': 'Flag Football 2025 - Game at King City (JV and V)',
             'location': 'King City (JV and V)',
             'description': 'Location: King City (JV and V)\nTime: 11:00 PM',
             'start': {'dateTime': '2025-09-07T06:00:00Z'},

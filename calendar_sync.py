@@ -590,7 +590,7 @@ def parse_sports_events(data, sheet_name=None):
                 description = "\n".join(description_parts)
                 
                 event_dict = {
-                    "summary": f"{event}",
+                    "summary": f"{event} at {location}",
                     "description": description,
                     "location": location,
                 }
