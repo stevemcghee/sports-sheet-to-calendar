@@ -21,7 +21,7 @@ spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-        - image: gcr.io/stevemcghee-slosports/calendar-sync:20251115-164728
+        - image: gcr.io/stevemcghee-slosports/calendar-sync:20251115-165834
           ports:
             - containerPort: 5000
           env:
@@ -39,6 +39,20 @@ spec:
               value: "projects/stevemcghee-slosports/secrets/google-client-secret/versions/latest"
             - name: GOOGLE_REDIRECT_URI
               value: "https://calendar-sync-927659207918.us-central1.run.app/auth/callback"
+            - name: SEND_EMAIL
+              value: "true"
+            - name: SMTP_SERVER
+              value: "smtp.gmail.com"
+            - name: SMTP_PORT
+              value: "587"
+            - name: FROM_EMAIL
+              value: "sloswimtiming@gmail.com"
+            - name: SMTP_USERNAME
+              value: "projects/stevemcghee-slosports/secrets/smtp-username/versions/latest"
+            - name: SMTP_PASSWORD
+              value: "projects/stevemcghee-slosports/secrets/smtp-password/versions/latest"
+            - name: TO_EMAIL
+              value: "projects/stevemcghee-slosports/secrets/to-email/versions/latest"
           resources:
             limits:
               cpu: "1"
