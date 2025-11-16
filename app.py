@@ -265,8 +265,9 @@ def index():
                 logger.info("config.json not found or is invalid. No spreadsheet_id loaded.")
                 spreadsheet_id_val = None
         
-        # Pass the unresolved value to the template
-        return render_template('index.html', spreadsheet_id=spreadsheet_id_val)
+        # Pass the resolved value to the template
+        resolved_spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
+        return render_template('index.html', spreadsheet_id=resolved_spreadsheet_id)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}")
         logger.error(traceback.format_exc())
