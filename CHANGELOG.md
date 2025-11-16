@@ -13,7 +13,7 @@ All notable changes to the Google Calendar Sync project will be documented in th
 - **Responsive Design**: Mobile-friendly web interface
 - **Comprehensive Logging**: Detailed logging for debugging and monitoring
 - **Environment Variable Support**: Production-ready configuration via environment variables
-- **Multiple Deployment Options**: Support for Render, Google Cloud Platform, Docker, and local development
+- **Multiple Deployment Options**: Support for Google Cloud Platform, Docker, and local development
 
 ### Changed
 - **Port Configuration**: Updated to use port 5000 by default with fallback options
@@ -32,7 +32,7 @@ All notable changes to the Google Calendar Sync project will be documented in th
 ### Technical Details
 - **Framework**: Flask web application with Gunicorn production server
 - **API Integration**: Google Sheets and Calendar APIs with OAuth2
-- **Deployment**: Support for Render, GCP Cloud Run, Docker, and local development
+- **Deployment**: Support for GCP Cloud Run, Docker, and local development
 - **Security**: Environment variable configuration, secure session management
 - **Monitoring**: Comprehensive logging and error tracking
 

@@ -119,13 +119,18 @@ def setup_env_file():
     )
     
     client_id = get_user_input(
-        "Google OAuth Client ID",
+        "Google OAuth Client ID (for Web Application)",
         "your-google-oauth-client-id"
     )
     
     client_secret = get_user_input(
-        "Google OAuth Client Secret",
+        "Google OAuth Client Secret (for Web Application)",
         "your-google-oauth-client-secret"
+    )
+
+    redirect_uri = get_user_input(
+        "Google OAuth Redirect URI (e.g., http://localhost:8080/auth/callback)",
+        "http://localhost:8080/auth/callback"
     )
     
     print()
@@ -186,6 +191,7 @@ GOOGLE_PROJECT_ID={project_id}
 # Google OAuth credentials (for production deployment)
 GOOGLE_CLIENT_ID={client_id}
 GOOGLE_CLIENT_SECRET={client_secret}
+GOOGLE_REDIRECT_URI={redirect_uri}
 
 # =============================================================================
 # ADVANCED SETTINGS (Optional)

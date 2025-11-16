@@ -8,7 +8,7 @@ This project automates the synchronization of events from a Google Spreadsheet t
 
 - **Web Interface**: An intuitive UI to preview and sync spreadsheet data interactively.
 - **Automated Syncing**: Scripts designed to be run on a schedule (e.g., hourly) for hands-off synchronization.
-- **Flexible Deployment**: Deploy locally, using Docker, or on cloud platforms like Render and Google Cloud Run.
+- **Flexible Deployment**: Deploy locally, using Docker, or on Google Cloud Run.
 - **Cross-Account Support**: Sync calendars between different Google accounts using either calendar sharing or a service account.
 - **Monitoring**: Track sync history and performance with built-in monitoring tools.
 
@@ -61,7 +61,7 @@ python automated_sync.py
 
 For more detailed information, please refer to the guides in the `docs/` directory:
 
-- **[Deployment Guide](./docs/DEPLOYMENT.md)**: Comprehensive instructions for deploying the application on various platforms (Local, Render, Google Cloud Run, Docker).
+- **[Deployment Guide](./docs/DEPLOYMENT.md)**: Comprehensive instructions for deploying the application on various platforms (Local, Google Cloud Run, Docker).
 - **[Authentication Guide](./docs/AUTHENTICATION.md)**: Detailed steps for setting up Google OAuth 2.0 and Service Accounts.
 - **[Advanced Setup Guide](./docs/ADVANCED_SETUP.md)**: Information on email notifications, monitoring, and other advanced features.
 

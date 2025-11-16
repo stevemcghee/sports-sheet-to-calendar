@@ -1,6 +1,8 @@
 import os
 from datetime import datetime, timedelta, time as dtime, date
 from dateutil import parser
+from google.oauth2 import service_account
+from google.auth import default
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -16,8 +18,8 @@ import re
 import calendar
 from dataclasses import dataclass
 import traceback
-import pandas as pd
 import pytz
+import json
 
 # Load environment variables
 load_dotenv()
@@ -77,9 +79,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Prevent logging from propagating to root logger
-logger.propagate = False
-
 # Prevent other loggers from writing to stdout/stderr
 logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
 logging.getLogger('google_auth_oauthlib.flow').setLevel(logging.WARNING)
@@ -104,18 +103,45 @@ class DateRange:
     start: date
     end: date
 
-def get_google_credentials():
+def get_google_credentials(auth_method='oauth'):
     """Get or refresh Google API credentials."""
+    creds = None
+    if auth_method == 'service_account':
+        try:
+            # Try to load from service account file
+            if os.path.exists('service-account-key.json'):
+                logger.debug("Loading credentials from service-account-key.json")
+                credentials = service_account.Credentials.from_service_account_file(
+                    'service-account-key.json',
+                    scopes=SCOPES
+                )
+                # Get the target user email from environment for domain-wide delegation
+                target_user = os.getenv('TARGET_USER_EMAIL')
+                if target_user:
+                    logger.debug(f"Creating delegated credentials for {target_user}")
+                    creds = credentials.with_subject(target_user)
+                else:
+                    creds = credentials
+            else:
+                # Fallback to default service account (e.g., in Cloud Run)
+                logger.debug("Attempting to use default service account credentials")
+                creds, project = default(scopes=SCOPES)
+                logger.debug(f"Loaded default service account credentials for project: {project}")
+            return creds
+        except Exception as e:
+            logger.error(f"Error with service account authentication: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise
+
+    # OAuth 2.0 flow
     try:
-        logger.debug("Starting credential retrieval process")
-        creds = None
-        
+        logger.debug("Starting OAuth 2.0 credential retrieval process")
         if os.path.exists('token.pickle'):
             logger.debug("Found existing token.pickle file")
             with open('token.pickle', 'rb') as token:
                 creds = pickle.load(token)
                 logger.debug("Loaded credentials from token.pickle")
-        
+
         if not creds or not creds.valid:
             logger.debug("Credentials are invalid or missing")
             if creds and creds.expired and creds.refresh_token:
@@ -127,12 +153,29 @@ def get_google_credentials():
                     logger.error(f"Failed to refresh credentials: {str(e)}")
                     logger.error(traceback.format_exc())
                     creds = None  # Force new OAuth flow
-            
+
             if not creds:
                 logger.debug("Starting new OAuth flow")
                 try:
-                    logger.debug("Loading credentials.json")
-                    flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+                    client_id = os.getenv('GOOGLE_CLIENT_ID')
+                    client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+
+                    if not client_id or not client_secret:
+                        raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in the environment for OAuth flow.")
+
+                    # Create a flow object from the client ID and secret
+                    flow = InstalledAppFlow.from_client_config(
+                        {
+                            "web": {
+                                "client_id": client_id,
+                                "client_secret": client_secret,
+                                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                                "token_uri": "https://oauth2.googleapis.com/token",
+                                "redirect_uris": ["http://localhost:8080/"],
+                            }
+                        },
+                        SCOPES,
+                    )
                     logger.debug("Generating authorization URL")
                     
                     # Generate authorization URL
@@ -155,15 +198,14 @@ def get_google_credentials():
                     logger.error(f"Error during OAuth flow: {str(e)}")
                     logger.error(traceback.format_exc())
                     raise
-            
             logger.debug("Saving credentials to token.pickle")
             with open('token.pickle', 'wb') as token:
                 pickle.dump(creds, token)
-        
+
         logger.debug("Successfully retrieved valid credentials")
         return creds
     except Exception as e:
-        logger.error(f"Error in get_google_credentials: {str(e)}")
+        logger.error(f"Error in get_google_credentials (OAuth): {str(e)}")
         logger.error(traceback.format_exc())
         raise
 
@@ -181,76 +223,94 @@ def get_spreadsheet_data(service, spreadsheet_id, sheet_name):
         raise
 
 def parse_date(date_str):
-    """Parse a date string in MM/DD/YYYY format, or a range like 2/15-17/2025.
-    Returns (start_date, end_date) where end_date may be None for single dates."""
+    """Parse a date string, handling single dates, ranges, and school-year logic for year-less dates."""
     date_str = date_str.strip()
     logger.debug(f"Parsing date string: '{date_str}'")
-    
-    # Reject invalid formats like "week of" or "or"
-    if 'week of' in date_str.lower() or ' or ' in date_str.lower():
-        logger.debug(f"Rejecting date with invalid keywords: '{date_str}'")
+
+    today = datetime.now()
+    crossover_month = 8  # August is the typical start of a school year
+
+    def get_year_for_month(month):
+        """Determine the correct year for a month based on a school year calendar."""
+        year = today.year
+        if today.month >= crossover_month and month < crossover_month:
+            year += 1
+        elif today.month < crossover_month and month >= crossover_month:
+            year -= 1
+        return year
+
+    # Reject invalid formats
+    if 'week of' in date_str.lower() or ' or ' in date_str.lower() or ',' in date_str:
+        logger.debug(f"Rejecting date with invalid keywords or format: '{date_str}'")
         raise ValueError(f"Invalid date format: {date_str}")
 
-    # Handle date ranges like 9/5-6
-    shorthand_range_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})', date_str)
-    if shorthand_range_match:
-        month, start_day, end_day = map(int, shorthand_range_match.groups())
-        year = datetime.now().year
+    # Handle ranges first
+    # Full range: 8/4/2025 - 8/7/2025 (or similar)
+    full_range_match = re.match(r'(\d{1,2}/\d{1,2}/\d{2,4})\s*-\s*(\d{1,2}/\d{1,2}/\d{2,4})', date_str)
+    if full_range_match:
+        start_str, end_str = full_range_match.groups()
+        try:
+            start_date, _ = parse_date(start_str) # Recursive call for single date parsing
+            end_date, _ = parse_date(end_str)
+            logger.debug(f"Parsed full date range: {start_date} to {end_date}")
+            return start_date, end_date
+        except ValueError as e:
+            logger.debug(f"Could not parse full range '{date_str}': {e}")
+            # Fall through to other regexes
+
+    # Shorthand range with year: 2/15-17/2025
+    range_with_year_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
+    if range_with_year_match:
+        month, start_day, end_day, year = map(int, range_with_year_match.groups())
         start_date = date(year, month, start_day)
         end_date = date(year, month, end_day)
-        logger.debug(f"Parsed shorthand date range without year: {start_date} to {end_date}")
+        logger.debug(f"Parsed shorthand range with year: {start_date} to {end_date}")
         return start_date, end_date
 
-    # Handle date ranges like 8/4 - 8/7
-    full_range_match_no_year = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})', date_str)
-    if full_range_match_no_year:
-        start_month, start_day, end_month, end_day = map(int, full_range_match_no_year.groups())
-        year = datetime.now().year
-        start_date = datetime(year, start_month, start_day).date()
-        end_date = datetime(year, end_month, end_day).date()
-        logger.debug(f"Parsed full date range without year: {start_date} to {end_date}")
+    # Shorthand range, different month, no year: 8/4 - 8/7
+    range_no_year_diff_month_match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})', date_str)
+    if range_no_year_diff_month_match:
+        start_month, start_day, end_month, end_day = map(int, range_no_year_diff_month_match.groups())
+        start_year = get_year_for_month(start_month)
+        end_year = get_year_for_month(end_month)
+        start_date = date(start_year, start_month, start_day)
+        end_date = date(end_year, end_month, end_day)
+        logger.debug(f"Parsed range with different months, no year: {start_date} to {end_date}")
         return start_date, end_date
 
-    # Handle date ranges like 8/4 - 8/7/2025
-    full_range_match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-    if full_range_match:
-        start_month, start_day, end_month, end_day, year = map(int, full_range_match.groups())
-        start_date = datetime(year, start_month, start_day).date()
-        end_date = datetime(year, end_month, end_day).date()
-        logger.debug(f"Parsed full date range: {start_date} to {end_date}")
+    # Shorthand range, same month, no year: 9/5-6
+    range_no_year_same_month_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})', date_str)
+    if range_no_year_same_month_match:
+        month, start_day, end_day = map(int, range_no_year_same_month_match.groups())
+        year = get_year_for_month(month)
+        start_date = date(year, month, start_day)
+        end_date = date(year, month, end_day)
+        logger.debug(f"Parsed range with same month, no year: {start_date} to {end_date}")
         return start_date, end_date
-    
-    # Handle date ranges like 2/15-17/2025
-    range_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
-    if range_match:
-        month, start_day, end_day, year = map(int, range_match.groups())
-        start_date = datetime(year, month, start_day).date()
-        end_date = datetime(year, month, end_day).date()
-        logger.debug(f"Parsed date range: {start_date} to {end_date}")
-        return start_date, end_date
-    # Handle date ranges like 4/16-18/2025 (shorthand, no month on end)
-    shorthand_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
-    if shorthand_match:
-        month, start_day, end_day, year = map(int, shorthand_match.groups())
-        start_date = datetime(year, month, start_day).date()
-        end_date = datetime(year, month, end_day).date()
-        logger.debug(f"Parsed shorthand date range: {start_date} to {end_date}")
-        return start_date, end_date
-    # Handle normal MM/DD/YYYY or MM/DD/YY
+
+    # Handle single dates
     try:
-        # First try MM/DD/YYYY format
+        # MM/DD/YYYY
         d = datetime.strptime(date_str, "%m/%d/%Y").date()
-        logger.debug(f"Parsed single date: {d}")
+        logger.debug(f"Parsed single date (YYYY): {d}")
         return d, None
     except ValueError:
         try:
-            # Try MM/DD/YY format (2-digit year)
+            # MM/DD/YY
             d = datetime.strptime(date_str, "%m/%d/%y").date()
-            logger.debug(f"Parsed single date (2-digit year): {d}")
+            logger.debug(f"Parsed single date (YY): {d}")
             return d, None
-        except Exception as e:
-            logger.debug(f"Failed to parse date '{date_str}': {str(e)}")
-            raise ValueError(f"Invalid date format: {date_str}")
+        except ValueError:
+            try:
+                # MM/DD (no year)
+                d_no_year = datetime.strptime(date_str, "%m/%d")
+                year = get_year_for_month(d_no_year.month)
+                d = date(year, d_no_year.month, d_no_year.day)
+                logger.debug(f"Parsed single date (no year): {d}")
+                return d, None
+            except ValueError:
+                logger.debug(f"Failed to parse date '{date_str}' with all formats.")
+                raise ValueError(f"Invalid date format: {date_str}")
 
 def parse_time(time_str):
     """Parse time string and return a datetime.time object or None for all-day events."""
@@ -387,9 +447,12 @@ def extract_first_time(time_str):
             hour += 12
         elif ampm and ampm.lower() == 'am' and hour == 12:
             hour = 0
-        # Default to PM for times between 1-11 if no AM/PM specified
-        elif not ampm and 1 <= hour <= 11:
-            hour += 12
+        # Heuristic for times without AM/PM, assuming sports events are between 8am and 8pm
+        elif not ampm:
+            if 1 <= hour <= 7: # Times like 1:00, 3:30, 7:00 are likely PM
+                hour += 12
+            # Times like 8:00, 9:00, 10:00, 11:00 are likely AM, so no change needed.
+            # 12:00 is noon, so no change needed.
         result = dtime(hour, minute)
         logger.debug(f"Parsed time: {result}")
         return result
@@ -398,13 +461,8 @@ def extract_first_time(time_str):
 
 def parse_sports_events(data, sheet_name=None):
     """Parse sports events from list data."""
-    try:
-        tz_str = os.getenv('TIMEZONE', 'America/Los_Angeles')
-        local_tz = pytz.timezone(tz_str)
-    except pytz.UnknownTimeZoneError:
-        logger.error(f"Unknown timezone: '{tz_str}'. Defaulting to America/Los_Angeles.")
-        tz_str = 'America/Los_Angeles'
-        local_tz = pytz.timezone(tz_str)
+    tz_str = 'America/Los_Angeles'
+    local_tz = pytz.timezone(tz_str)
 
     if not data or len(data) < 2:  # Need at least headers and one event
         logger.warning(f"Not enough data rows: {len(data) if data else 0}")
@@ -443,6 +501,7 @@ def parse_sports_events(data, sheet_name=None):
     
     # More flexible column detection
     date_idx = None
+    day_idx = None # To be ignored, but recognized
     event_idx = None
     location_idx = None
     time_idx = None
@@ -460,33 +519,36 @@ def parse_sports_events(data, sheet_name=None):
         header_lower = str(header).lower().strip()
         if 'date' in header_lower:
             date_idx = i
+        elif 'day' in header_lower:
+            day_idx = i
         elif 'event' in header_lower or 'title' in header_lower or 'name' in header_lower or 'opponent' in header_lower:
             event_idx = i
         elif 'location' in header_lower or 'place' in header_lower or 'venue' in header_lower:
             location_idx = i
-        elif 'time' in header_lower:
-            # Prefer "Start Time" over other time columns
-            if 'start' in header_lower:
-                time_idx = i
-            elif time_idx is None:  # Only set if no start time found yet
-                time_idx = i
-        elif 'transportation' in header_lower or 'transport' in header_lower:
+        elif 'start time' in header_lower: # Specific check for 'start time'
+            time_idx = i
+        elif 'time' in header_lower and time_idx is None: # Fallback for generic 'time' if 'start time' not found
+            time_idx = i
+        elif 'bus/vans' in header_lower or 'transportation' in header_lower or 'transport' in header_lower:
             transportation_idx = i
-        elif 'release' in header_lower:
+        elif 'release time' in header_lower: # Specific check for 'release time'
             release_idx = i
-        elif 'departure' in header_lower or 'depart' in header_lower:
+        elif 'depart time' in header_lower: # Specific check for 'depart time'
             departure_idx = i
         elif 'attire' in header_lower or 'uniform' in header_lower:
             attire_idx = i
         elif 'notes' in header_lower or 'note' in header_lower:
             notes_idx = i
-        elif 'bus' in header_lower:
+        # Separate bus/vans columns are now handled by the more general 'bus/vans' check above
+        # but we keep them for backwards compatibility if they are separate
+        elif 'bus' in header_lower and transportation_idx is None:
             bus_idx = i
-        elif 'vans' in header_lower or 'van' in header_lower:
+        elif 'vans' in header_lower and transportation_idx is None:
             vans_idx = i
     
-    logger.debug(f"Column indices - Date: {date_idx}, Event: {event_idx}, Location: {location_idx}, Time: {time_idx}")
+    logger.debug(f"Column indices - Date: {date_idx}, Day: {day_idx}, Event: {event_idx}, Location: {location_idx}, Time: {time_idx}")
     logger.debug(f"Additional columns - Transportation: {transportation_idx}, Release: {release_idx}, Departure: {departure_idx}, Attire: {attire_idx}, Notes: {notes_idx}, Bus: {bus_idx}, Vans: {vans_idx}")
+    logger.debug(f"Final time_idx: {time_idx}")
     
     if date_idx is None or event_idx is None or location_idx is None:
         logger.error(f"Missing required columns. Found headers: {headers}")
@@ -503,6 +565,7 @@ def parse_sports_events(data, sheet_name=None):
     data_start_row = header_row_idx + 1
     logger.debug(f"Processing {len(data[data_start_row:])} data rows starting from row {data_start_row}")
     for i, row in enumerate(data[data_start_row:]):
+        logger.info(f"Processing raw row {i+data_start_row+1}: {row}")
         try:
             # Check if we have enough columns for required fields
             required_max = max(date_idx, event_idx, location_idx)
@@ -513,6 +576,12 @@ def parse_sports_events(data, sheet_name=None):
             date_str = row[date_idx]
             event = row[event_idx]
             location = row[location_idx]
+            
+            if time_idx is not None:
+                logger.debug(f"Accessing row[{time_idx}] for time. Row length is {len(row)}.")
+                time_from_row = row[time_idx] if len(row) > time_idx else "INDEX OUT OF BOUNDS"
+                logger.debug(f"Value at row[{time_idx}] is: '{time_from_row}'")
+
             time_str = row[time_idx] if time_idx is not None and len(row) > time_idx else ""
             
             # Extract additional fields
@@ -540,51 +609,26 @@ def parse_sports_events(data, sheet_name=None):
                 continue
             try:
                 start_date, end_date = parse_date(date_str)
-                # If end_date is None, it's a single-day event
-                # If end_date is not None, it's a range (inclusive)
-                # For all-day events, start at 00:00, end at 00:00 of the day after the end date
+                logger.debug(f"Passing this time string to extract_first_time: '{time_str}'")
                 parsed_time = extract_first_time(time_str)
-                # New: extract last time if multiple times are present
-                def extract_last_time(time_str):
-                    if not time_str:
-                        return None
-                    matches = re.findall(r'(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?', time_str)
-                    if matches:
-                        hour, minute, ampm = matches[-1]
-                        hour = int(hour)
-                        minute = int(minute) if minute else 0
-                        if ampm and ampm.lower() == 'pm' and hour < 12:
-                            hour += 12
-                        elif ampm and ampm.lower() == 'am' and hour == 12:
-                            hour = 0
-                        elif not ampm and 1 <= hour <= 11:
-                            hour += 12
-                        return dtime(hour, minute)
-                    return None
-                # For sports events, always create all-day events for consistency
-                if end_date:
-                    # Multi-day event (inclusive range)
-                    end_date_for_calendar = end_date + timedelta(days=1)  # Google Calendar end date is exclusive
-                else:
-                    # Single-day event
-                    end_date_for_calendar = start_date + timedelta(days=1)  # Google Calendar end date is exclusive
-                
+
                 # Build description with all available information
                 description_parts = [f"Location: {location}"]
                 
-                if parsed_time:
+                # Add the original time string to the description if it exists and is not a placeholder
+                if time_str and time_str.strip() and time_str.strip() != '--':
                     description_parts.append(f"Time: {time_str}")
                 
-                # Add additional fields to description if they have values
-                if transportation and transportation.strip():
+                # Add other fields to description if they have values and are not placeholders
+                if transportation and transportation.strip() and transportation.strip() != '--':
                     description_parts.append(f"Transportation: {transportation}")
-                if release_time and release_time.strip():
+                if release_time and release_time.strip() and release_time.strip() != '--':
                     description_parts.append(f"Release Time: {release_time}")
-                if departure_time and departure_time.strip():
+                if departure_time and departure_time.strip() and departure_time.strip() != '--':
                     description_parts.append(f"Departure Time: {departure_time}")
-                if attire and attire.strip():
+                if attire and attire.strip() and attire.strip() != '--':
                     description_parts.append(f"Attire: {attire}")
-                if notes and notes.strip():
+                if notes and notes.strip() and notes.strip() != '--':
                     description_parts.append(f"Notes: {notes}")
                 
                 description = "\n".join(description_parts)
@@ -596,26 +640,24 @@ def parse_sports_events(data, sheet_name=None):
                 }
 
                 if parsed_time:
+                    # This is a timed event
                     start_datetime_naive = datetime.combine(start_date, parsed_time)
                     start_datetime_aware = local_tz.localize(start_datetime_naive)
+                    # Assume a 2-hour duration if no end time is specified
                     end_datetime_aware = start_datetime_aware + timedelta(hours=2)
                     event_dict["start"] = {"dateTime": start_datetime_aware.isoformat(), "timeZone": tz_str}
                     event_dict["end"] = {"dateTime": end_datetime_aware.isoformat(), "timeZone": tz_str}
                 else:
+                    # This is an all-day event
+                    if end_date:
+                        # Multi-day all-day event
+                        end_date_for_calendar = end_date + timedelta(days=1)
+                    else:
+                        # Single all-day event
+                        end_date_for_calendar = start_date + timedelta(days=1)
                     event_dict["start"] = {"date": start_date.strftime("%Y-%m-%d")}
                     event_dict["end"] = {"date": end_date_for_calendar.strftime("%Y-%m-%d")}
                 
-                # Add custom fields for additional data (these will be stored in the event but may not display in all calendar views)
-                if transportation and transportation.strip():
-                    event_dict["transportation"] = transportation
-                if release_time and release_time.strip():
-                    event_dict["release_time"] = release_time
-                if departure_time and departure_time.strip():
-                    event_dict["departure_time"] = departure_time
-                if attire and attire.strip():
-                    event_dict["attire"] = attire
-                if notes and notes.strip():
-                    event_dict["notes"] = notes
                 events.append(event_dict)
                 logger.debug(f"Successfully created event: {event_dict['summary']}")
             except Exception as e:
@@ -635,15 +677,22 @@ def parse_sports_events(data, sheet_name=None):
     return events
 
 def list_available_sheets(service, spreadsheet_id):
-    """List all available sheets in the spreadsheet."""
+    """List all available sheets in the spreadsheet, ignoring hidden ones."""
     try:
         logger.debug("Fetching available sheets")
         spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-        sheets = spreadsheet.get('sheets', [])
+        all_sheets = spreadsheet.get('sheets', [])
+        
+        visible_sheets = []
         logger.info("Available sheets:")
-        for sheet in sheets:
-            logger.info(f"- {sheet['properties']['title']}")
-        return [sheet['properties']['title'] for sheet in sheets]
+        for sheet in all_sheets:
+            if not sheet['properties'].get('hidden', False):
+                visible_sheets.append(sheet['properties']['title'])
+                logger.info(f"- {sheet['properties']['title']}")
+            else:
+                logger.info(f"- (Hidden) {sheet['properties']['title']}")
+        
+        return visible_sheets
     except Exception as e:
         logger.error(f"Error listing sheets: {str(e)}")
         raise
@@ -698,6 +747,8 @@ def main():
                           help=f'Google Cloud Project ID (default: {DEFAULT_PROJECT_ID})')
         parser.add_argument('--wipe', action='store_true',
                           help='Wipe all events from calendars before syncing')
+        parser.add_argument('--auth-method', default='oauth', choices=['oauth', 'service_account'],
+                          help="Authentication method: 'oauth' or 'service_account' (default: oauth)")
         args = parser.parse_args()
 
         logger.info("Starting calendar sync")
@@ -705,10 +756,11 @@ def main():
         logger.debug(f"Using calendar name: {args.calendar_name}")
         logger.debug(f"Using project ID: {args.project_id}")
         logger.debug(f"Wipe mode: {args.wipe}")
-        
+        logger.debug(f"Auth method: {args.auth_method}")
+
         # Get credentials and build services
         logger.debug("Getting Google credentials")
-        creds = get_google_credentials()
+        creds = get_google_credentials(args.auth_method)
         logger.debug("Building Google services")
         sheets_service = build('sheets', 'v4', credentials=creds)
         calendar_service = build('calendar', 'v3', credentials=creds)
@@ -957,28 +1009,38 @@ def fix_event_times(event):
 import pytz
 
 def get_event_key(event):
-    """Generate a unique key for an event based on its start/end times and summary."""
+    """Generate a unique key for an event based on its start date and summary."""
     start = event.get('start', {})
-    summary = event.get('summary', '')
+    summary = (event.get('summary', '') or '').strip()
     
-    # Get start time/date
+    logger.debug(f"Generating key for summary repr: {repr(summary)}")
+
+    # Get start date
     if 'dateTime' in start:
-        # For datetime events, keep the full datetime string
         dt = parser.isoparse(start['dateTime'])
-        start_str = dt.astimezone(pytz.utc).isoformat()
+        local_tz = pytz.timezone('America/Los_Angeles')
+        start_date_str = dt.astimezone(local_tz).date().isoformat() # Get date in local timezone
     elif 'date' in start:
-        start_str = start['date']
+        start_date_str = start['date']
     else:
+        logger.debug(f"Could not determine start date for event: {json.dumps(event)}")
         return None
         
-    return f"{start_str}_{summary}"
+    key = f"{start_date_str}_{summary}"
+    logger.debug(f"Generated key: '{key}' for event: '{summary}'")
+    return key
 
 def events_are_equal(event1, event2):
     """Compare two events for equality, ignoring timezone differences and handling missing fields."""
+    logger.debug("--- Comparing Events ---")
+    logger.debug(f"Event 1 (Sheet): {json.dumps(event1, indent=2)}")
+    logger.debug(f"Event 2 (Calendar): {json.dumps(event2, indent=2)}")
+
     # Compare summaries (ignoring whitespace)
-    summary1 = event1.get('summary', '').strip()
-    summary2 = event2.get('summary', '').strip()
+    summary1 = (event1.get('summary', '') or '').strip()
+    summary2 = (event2.get('summary', '') or '').strip()
     if summary1 != summary2:
+        logger.debug(f"Summaries do not match: '{summary1}' vs '{summary2}'")
         return False
         
     # Compare start times
@@ -989,16 +1051,16 @@ def events_are_equal(event1, event2):
         dt1 = parser.isoparse(start1['dateTime'])
         dt2 = parser.isoparse(start2['dateTime'])
         if dt1.astimezone(pytz.utc) != dt2.astimezone(pytz.utc):
+            logger.debug(f"Start dateTimes do not match: '{start1['dateTime']}' vs '{start2['dateTime']}'")
             return False
     elif ('date' in start1 and 'date' in start2):
         if start1['date'] != start2['date']:
+            logger.debug(f"Start dates do not match: '{start1['date']}' vs '{start2['date']}'")
             return False
     else:
-        # One is date and one is datetime - compare just the date portion
-        date1 = start1.get('date') or parser.isoparse(start1['dateTime']).date().isoformat()
-        date2 = start2.get('date') or parser.isoparse(start2['dateTime']).date().isoformat()
-        if date1 != date2:
-            return False
+        # One event is timed and the other is all-day. They are not equal.
+        logger.debug("Mismatch: One event is timed, the other is all-day.")
+        return False
         
     # Compare end times
     end1 = event1.get('end', {})
@@ -1008,27 +1070,35 @@ def events_are_equal(event1, event2):
         dt1 = parser.isoparse(end1['dateTime'])
         dt2 = parser.isoparse(end2['dateTime'])
         if dt1.astimezone(pytz.utc) != dt2.astimezone(pytz.utc):
+            logger.debug(f"End dateTimes do not match: '{end1['dateTime']}' vs '{end2['dateTime']}'")
             return False
     elif ('date' in end1 and 'date' in end2):
         if end1['date'] != end2['date']:
+            logger.debug(f"End dates do not match: '{end1['date']}' vs '{end2['date']}'")
             return False
     else:
-        # One is date and one is datetime - compare just the date portion
-        date1 = end1.get('date') or parser.isoparse(end1['dateTime']).date().isoformat()
-        date2 = end2.get('date') or parser.isoparse(end2['dateTime']).date().isoformat()
-        if date1 != date2:
-            return False
+        # One event is timed and the other is all-day. They are not equal.
+        logger.debug("Mismatch: One event end is timed, the other is all-day.")
+        return False
         
     # Compare descriptions (ignoring whitespace and timezone info)
     # Handle None descriptions as empty strings
     desc1 = (event1.get('description') or '').strip()
     desc2 = (event2.get('description') or '').strip()
     
+    logger.debug(f"Description 1 repr: {repr(desc1)}")
+    logger.debug(f"Description 2 repr: {repr(desc2)}")
+    
     # Clean up descriptions by removing timezone info and whitespace
     desc1 = re.sub(r'[+-]\d{2}:\d{2}', '', desc1).strip()
     desc2 = re.sub(r'[+-]\d{2}:\d{2}', '', desc2).strip()
     
-    return desc1 == desc2
+    if desc1 != desc2:
+        logger.debug(f"Descriptions do not match: '{desc1}' vs '{desc2}'")
+        return False
+
+    logger.debug("Events are equal.")
+    return True
 
 def get_existing_events(service, calendar_id):
     """Get all existing events from the calendar and index them by key."""
@@ -1045,218 +1115,117 @@ def get_existing_events(service, calendar_id):
             
             for event in events_result.get('items', []):
                 key = get_event_key(event)
-                events[key] = event
+                if key:
+                    events[key] = event
+                    logger.debug(f"Fetched calendar event key: '{key}' for event: '{event.get('summary', 'Unknown')}'")
             
             page_token = events_result.get('nextPageToken')
             if not page_token:
                 break
                 
+        logger.debug(f"Total unique keys fetched from calendar: {len(events)}")
         return events
     except Exception as e:
         logger.error(f"Error fetching existing events: {str(e)}")
         raise
 
-def update_calendar(service, events, calendar_id, return_detailed_changes: bool = False):
-    """Update calendar with new events.
-
-    When return_detailed_changes is True, also return a dict with detailed change info:
-      {
-        'inserted': [event_after, ...],
-        'updated': [{'before': existing_event, 'after': new_event, 'key': event_key}, ...],
-        'deleted': [existing_event, ...]
-      }
-    Returns either (deleted_count, inserted_count, changed_count) or
-            (deleted_count, inserted_count, changed_count, details_dict)
+def calculate_changes(events, existing_events_dict):
     """
+    Calculates the changes between a list of new events and a dictionary of existing events.
+    Returns a dictionary with 'inserted', 'updated', and 'deleted' event lists.
+    """
+    events_to_keep = set()
+    inserted_events = []
+    updated_pairs = []
+    deleted_events = []
+
+    for event in events:
+        try:
+            is_valid, error_msg = validate_event_times(event)
+            if not is_valid:
+                logger.warning(f"Skipping invalid event '{event.get('summary', 'Unknown')}': {error_msg}")
+                continue
+
+            event_key = get_event_key(event)
+            if not event_key:
+                logger.warning(f"Could not generate key for event: {event.get('summary', 'Unknown')}")
+                continue
+
+            if event_key in existing_events_dict:
+                existing_event = existing_events_dict[event_key]
+                if not events_are_equal(event, existing_event):
+                    updated_pairs.append({'before': existing_event, 'after': event})
+                events_to_keep.add(event_key)
+            else:
+                inserted_events.append(event)
+        except Exception as e:
+            logger.error(f"Error processing event '{event.get('summary', 'Unknown')}': {e}")
+            continue
+
+    existing_keys = set(existing_events_dict.keys())
+    keys_to_delete = existing_keys - events_to_keep
+    
+    for key in keys_to_delete:
+        deleted_events.append(existing_events_dict[key])
+
+    return {
+        'inserted': inserted_events,
+        'updated': updated_pairs,
+        'deleted': deleted_events
+    }
+
+def update_calendar(service, events, calendar_id, return_detailed_changes: bool = False):
+    """Update calendar with new events using the calculated changes."""
     try:
         logger.info("Starting calendar update")
         logger.info(f"Processing {len(events)} events for calendar {calendar_id}")
         
-        # Get existing events
         existing_events_dict = get_existing_events(service, calendar_id)
         logger.info(f"Found {len(existing_events_dict)} existing events")
         
-        # Process each event
-        events_to_keep = set()
-        events_to_delete = set()
-        events_to_insert = []
-        events_to_change = []
+        changes = calculate_changes(events, existing_events_dict)
+        
+        events_to_insert = changes['inserted']
+        events_to_change = changes['updated']
+        events_to_delete = changes['deleted']
 
-        # Detailed change tracking
-        inserted_events = []
-        updated_pairs = []  # list of {'before': existing_event, 'after': new_event, 'key': event_key}
-        deleted_events = []
-        
-        logger.info(f"Processing {len(events)} events for calendar update")
-        for i, event in enumerate(events):
-            try:
-                logger.info(f"Processing event {i+1}/{len(events)}: {event.get('summary', 'Unknown')}")
-                logger.debug(f"Event data: {event}")
-                
-                # Validate event structure
-                if not isinstance(event, dict):
-                    logger.error(f"Invalid event format: {event}")
-                    continue
-                    
-                if 'start' not in event or 'end' not in event:
-                    logger.error(f"Event missing start/end times: {event}")
-                    continue
-                    
-                if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
-                    logger.error(f"Invalid start/end format in event: {event}")
-                    logger.error(f"Start type: {type(event['start'])}")
-                    logger.error(f"End type: {type(event['end'])}")
-                    continue
-                    
-                # Check for either dateTime or date fields (handle both timed and all-day events)
-                if ('dateTime' not in event['start'] and 'date' not in event['start']) or ('dateTime' not in event['end'] and 'date' not in event['end']):
-                    logger.error(f"❌ Event missing dateTime or date in start/end: {event}")
-                    logger.error(f"Start: {event['start']}")
-                    logger.error(f"End: {event['end']}")
-                    continue
-                
-                # Validate event times
-                is_valid, error_msg = validate_event_times(event)
-                if not is_valid:
-                    logger.warning(f"⚠️ Invalid event times for '{event.get('summary', 'Unknown')}': {error_msg}")
-                    logger.warning(f"Attempting to fix time issues...")
-                    
-                    # Try to fix the time issues
-                    fixed, fix_msg = fix_event_times(event)
-                    if fixed:
-                        logger.info(f"🔧 Fixed event times: {fix_msg}")
-                        # Re-validate after fixing
-                        is_valid, error_msg = validate_event_times(event)
-                        if not is_valid:
-                            logger.error(f"❌ Still invalid after fixing: {error_msg}")
-                            logger.error(f"Event data: {event}")
-                            continue
-                    else:
-                        logger.error(f"❌ Could not fix time issues: {fix_msg}")
-                        logger.error(f"Event data: {event}")
-                        continue
-                
-                event_key = get_event_key(event)
-                logger.debug(f"Generated event key: {event_key}")
-                
-                if event_key in existing_events_dict:
-                    logger.debug(f"Found existing event with key: {event_key}")
-                    existing_event = existing_events_dict[event_key]
-                    
-                    if not events_are_equal(event, existing_event):
-                        logger.debug(f"Event needs update: {event_key}")
-                        events_to_change.append(event)
-                        if return_detailed_changes:
-                            updated_pairs.append({'before': existing_event, 'after': event, 'key': event_key})
-                    else:
-                        logger.debug(f"Event unchanged: {event_key}")
-                        events_to_keep.add(event_key)
-                else:
-                    logger.debug(f"New event: {event_key}")
-                    events_to_insert.append(event)
-                    if return_detailed_changes:
-                        inserted_events.append(event)
-                    
-            except Exception as e:
-                logger.error(f"Error processing event {i+1}: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-                continue
-        
-        # Find events to delete
-        existing_keys = set(existing_events_dict.keys())
-        keys_to_keep = set(events_to_keep)
-        keys_to_delete = existing_keys - keys_to_keep
-        
-        for event_key in keys_to_delete:
-            logger.debug(f"Event to delete: {event_key}")
-            events_to_delete.add(event_key)
-            if return_detailed_changes:
-                deleted_events.append(existing_events_dict[event_key])
-        
-        # Apply changes
         logger.info(f"Applying changes: {len(events_to_insert)} to insert, {len(events_to_change)} to update, {len(events_to_delete)} to delete")
-        logger.info(f"Events to insert: {[event.get('summary', 'Unknown') for event in events_to_insert]}")
-        logger.info(f"Events to update: {[event.get('summary', 'Unknown') for event in events_to_change]}")
-        logger.info(f"Events to delete: {[existing_events_dict[key].get('summary', 'Unknown') for key in events_to_delete]}")
-        
+
         # Delete events
-        for event_key in events_to_delete:
+        for event in events_to_delete:
             try:
-                event = existing_events_dict[event_key]
-                logger.debug(f"Deleting event: {event_key}")
+                logger.debug(f"Deleting event: {event.get('summary', 'Unknown')}")
                 service.events().delete(calendarId=calendar_id, eventId=event['id']).execute()
             except Exception as e:
-                logger.error(f"Error deleting event {event_key}: {str(e)}")
-                logger.error(traceback.format_exc())
-        
+                logger.error(f"Error deleting event {event.get('id')}: {e}")
+
         # Insert new events
-        logger.info(f"Inserting {len(events_to_insert)} new events")
-        for i, event in enumerate(events_to_insert):
+        for event in events_to_insert:
             try:
-                logger.info(f"Inserting event {i+1}/{len(events_to_insert)}: {event['summary']}")
-                logger.debug(f"Event details: {event}")
-                
-                # Validate event times before inserting
-                is_valid, error_msg = validate_event_times(event)
-                if not is_valid:
-                    logger.warning(f"⚠️ Invalid event times for '{event.get('summary', 'Unknown')}': {error_msg}")
-                    logger.warning(f"Attempting to fix time issues...")
-                    
-                    # Try to fix the time issues
-                    fixed, fix_msg = fix_event_times(event)
-                    if fixed:
-                        logger.info(f"🔧 Fixed event times: {fix_msg}")
-                        # Re-validate after fixing
-                        is_valid, error_msg = validate_event_times(event)
-                        if not is_valid:
-                            logger.error(f"❌ Still invalid after fixing: {error_msg}")
-                            logger.error(f"Event data: {event}")
-                            continue
-                    else:
-                        logger.error(f"❌ Could not fix time issues: {fix_msg}")
-                        logger.error(f"Event data: {event}")
-                        continue
-                
-                # Insert the event
-                result = service.events().insert(calendarId=calendar_id, body=event).execute()
-                logger.info(f"✅ Successfully inserted event: {result.get('id', 'unknown')}")
-                logger.debug(f"Insert result: {result}")
-                
+                logger.debug(f"Inserting event: {event.get('summary', 'Unknown')}")
+                service.events().insert(calendarId=calendar_id, body=event).execute()
             except Exception as e:
-                logger.error(f"❌ Error inserting event {i+1}: {str(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-        
+                logger.error(f"Error inserting event {event.get('summary', 'Unknown')}: {e}")
+
         # Update changed events
-        for event in events_to_change:
+        for change in events_to_change:
             try:
-                event_key = get_event_key(event)
-                existing_event = existing_events_dict[event_key]
-                logger.debug(f"Updating event: {event_key}")
-                service.events().update(calendarId=calendar_id, eventId=existing_event['id'], body=event).execute()
+                event_to_update = change['after']
+                event_id = change['before']['id']
+                logger.debug(f"Updating event: {event_to_update.get('summary', 'Unknown')}")
+                service.events().update(calendarId=calendar_id, eventId=event_id, body=event_to_update).execute()
             except Exception as e:
-                logger.error(f"Error updating event {event_key}: {str(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-        
+                logger.error(f"Error updating event {change['before'].get('id')}: {e}")
+
         logger.info("Calendar update completed successfully")
-        logger.info(f"Summary: Inserted {len(events_to_insert)} events, Updated {len(events_to_change)} events, Deleted {len(events_to_delete)} events")
         
         if return_detailed_changes:
-            details = {
-                'inserted': inserted_events,
-                'updated': updated_pairs,
-                'deleted': deleted_events,
-            }
-            return len(events_to_delete), len(events_to_insert), len(events_to_change), details
+            return len(events_to_delete), len(events_to_insert), len(events_to_change), changes
         
-        # Return the counts for tracking
         return len(events_to_delete), len(events_to_insert), len(events_to_change)
         
     except Exception as e:
-        logger.error(f"Error in update_calendar: {str(e)}")
+        logger.error(f"Error in update_calendar: {e}")
         logger.error(traceback.format_exc())
         raise
 

@@ -1,24 +1,27 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for
 from calendar_sync import (
     get_spreadsheet_data, parse_sports_events,
     create_or_get_sports_calendar, update_calendar, get_existing_events,
-    events_are_equal, list_available_sheets, get_event_key
+    events_are_equal, list_available_sheets, get_event_key, calculate_changes
 )
 from googleapiclient.discovery import build
 from google.auth.exceptions import RefreshError
 import os
+import io
 from datetime import datetime
 import json
 import logging
 import traceback
 import sys
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 import pickle
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 import pytz
 from googleapiclient.errors import HttpError
+from dateutil import parser
+from google.cloud import secretmanager
 
 # Load environment variables
 load_dotenv()
@@ -37,12 +40,89 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev')
 
+# Global variable to store the resolved default spreadsheet ID
+DEFAULT_SPREADSHEET_ID_FROM_SECRET = None
+INITIAL_SPREADSHEET_ID_ENV_VAR = os.getenv('SPREADSHEET_ID')
+
+def _access_secret_version_raw(secret_version_id):
+    """Access the payload of the given secret version directly from Secret Manager."""
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        response = client.access_secret_version(name=secret_version_id)
+        return response.payload.data.decode('UTF-8')
+    except Exception as e:
+        logger.error(f"Failed to access secret version {secret_version_id}: {e}")
+        raise
+
+def access_secret_version(secret_version_id):
+    """Access the payload of the given secret version if it's a secret path.
+    This function is for general secrets (like client ID/secret) that are not cached globally."""
+    if not isinstance(secret_version_id, str) or not secret_version_id.startswith('projects/'):
+        return secret_version_id # Not a secret manager path, return as is
+    return _access_secret_version_raw(secret_version_id)
+
+def resolve_spreadsheet_id(input_id):
+    """Resolves the spreadsheet ID, using the cached default if applicable."""
+    global DEFAULT_SPREADSHEET_ID_FROM_SECRET
+    global INITIAL_SPREADSHEET_ID_ENV_VAR
+
+    # If the input ID is the original secret path from env var, use the cached resolved value
+    if input_id == INITIAL_SPREADSHEET_ID_ENV_VAR and DEFAULT_SPREADSHEET_ID_FROM_SECRET is not None:
+        logger.debug("Using cached default spreadsheet ID.")
+        return DEFAULT_SPREADSHEET_ID_FROM_SECRET
+    
+    # Otherwise, resolve it (either it's a new secret path or a direct ID)
+    resolved_id = access_secret_version(input_id)
+
+    # If the resolved ID came from the initial env var, and not yet cached, cache it
+    if input_id == INITIAL_SPREADSHEET_ID_ENV_VAR and DEFAULT_SPREADSHEET_ID_FROM_SECRET is None:
+        DEFAULT_SPREADSHEET_ID_FROM_SECRET = resolved_id
+        logger.info("Cached default spreadsheet ID from Secret Manager.")
+
+    return resolved_id
+
+# At app startup, resolve the default spreadsheet ID once if it's a secret path
+if INITIAL_SPREADSHEET_ID_ENV_VAR and INITIAL_SPREADSHEET_ID_ENV_VAR.startswith('projects/'):
+    try:
+        DEFAULT_SPREADSHEET_ID_FROM_SECRET = _access_secret_version_raw(INITIAL_SPREADSHEET_ID_ENV_VAR)
+        logger.info("Pre-resolved default SPREADSHEET_ID from Secret Manager at startup.")
+    except Exception as e:
+        logger.error(f"Failed to pre-resolve default SPREADSHEET_ID at startup: {e}")
+        # Keep DEFAULT_SPREADSHEET_ID_FROM_SECRET as None, so it will be resolved on first request
+        DEFAULT_SPREADSHEET_ID_FROM_SECRET = None
+
 # OAuth configuration
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
     'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/userinfo.email'
+    'https://www.googleapis.com/auth/userinfo.email',
+    'openid'
 ]
+
+def get_client_config():
+    """Constructs the client configuration for OAuth, fetching secrets from Secret Manager if necessary."""
+    client_id_val = os.getenv('GOOGLE_CLIENT_ID')
+    client_secret_val = os.getenv('GOOGLE_CLIENT_SECRET')
+
+    client_id = access_secret_version(client_id_val)
+    client_secret = access_secret_version(client_secret_val)
+
+    logger.info(f"Using Client ID: {client_id[:10]}...") # Log only a prefix for security
+    
+    if not client_id or not client_secret:
+        raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set and accessible.")
+
+    return {
+        "web": {
+            "client_id": client_id,
+            "project_id": os.getenv('GOOGLE_PROJECT_ID', 'default-project'),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_secret": client_secret,
+            "redirect_uris": [request.url_root.rstrip('/') + '/auth/callback']
+        }
+    }
 
 # Initialize Google Calendar service
 def get_calendar_service():
@@ -51,7 +131,27 @@ def get_calendar_service():
         
         # Check if user is authenticated via session
         if 'credentials' not in session:
-            raise Exception('Not authenticated with Google')
+            logger.info("No credentials in session.")
+            # If not in session, try to load from token.pickle
+            if os.path.exists('token.pickle'):
+                logger.info("Loading credentials from token.pickle")
+                with open('token.pickle', 'rb') as token:
+                    credentials = pickle.load(token)
+                    # Save credentials to session
+                    session['credentials'] = {
+                        'token': credentials.token,
+                        'refresh_token': credentials.refresh_token,
+                        'token_uri': credentials.token_uri,
+                        'client_id': credentials.client_id,
+                        'client_secret': credentials.client_secret,
+                        'scopes': credentials.scopes
+                    }
+                    logger.info("Credentials loaded from token.pickle and saved to session.")
+            else:
+                logger.warning("No token.pickle file found.")
+                raise Exception('Not authenticated with Google')
+        else:
+            logger.info("Credentials found in session.")
             
         # Get credentials from session
         credentials = Credentials(**session['credentials'])
@@ -88,8 +188,29 @@ def get_calendar_service():
 def get_sheets_service():
     """Get an authenticated Google Sheets service."""
     try:
+        logger.info("Attempting to get Google sheets credentials...")
         if 'credentials' not in session:
-            raise Exception('Not authenticated with Google')
+            logger.info("No credentials in session for sheets.")
+            # If not in session, try to load from token.pickle
+            if os.path.exists('token.pickle'):
+                logger.info("Loading credentials from token.pickle for sheets")
+                with open('token.pickle', 'rb') as token:
+                    credentials = pickle.load(token)
+                    # Save credentials to session
+                    session['credentials'] = {
+                        'token': credentials.token,
+                        'refresh_token': credentials.refresh_token,
+                        'token_uri': credentials.token_uri,
+                        'client_id': credentials.client_id,
+                        'client_secret': credentials.client_secret,
+                        'scopes': credentials.scopes
+                    }
+                    logger.info("Credentials loaded from token.pickle and saved to session for sheets.")
+            else:
+                logger.warning("No token.pickle file found for sheets.")
+                raise Exception('Not authenticated with Google')
+        else:
+            logger.info("Credentials found in session for sheets.")
             
         # Get credentials from session
         credentials = Credentials(**session['credentials'])
@@ -107,14 +228,16 @@ def get_sheets_service():
                     'client_secret': credentials.client_secret,
                     'scopes': credentials.scopes
                 }
+                logger.info("Credentials refreshed successfully for sheets.")
             except RefreshError as e:
-                logger.error(f"Failed to refresh credentials: {str(e)}")
+                logger.error(f"Failed to refresh credentials for sheets: {str(e)}")
                 # Clear invalid credentials from session
                 session.pop('credentials', None)
                 raise Exception("Your Google access token has expired. Please re-authenticate.")
         
         # Build and return the service
         service = build('sheets', 'v4', credentials=credentials)
+        logger.info("Sheets service built successfully.")
         return service
     except Exception as e:
         logger.error(f"Error getting sheets service: {str(e)}")
@@ -128,102 +251,46 @@ def get_sheets_service():
 def index():
     try:
         logger.info("Rendering index page...")
-        
-        # Check if we're in production (using environment variables)
-        client_id = os.getenv('GOOGLE_CLIENT_ID')
-        client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
-        
-        if client_id and client_secret:
-            # Production mode - using environment variables
-            logger.info("Using environment variables for OAuth credentials")
-            # Create credentials.json from environment variables if it doesn't exist
-            if not os.path.exists('credentials.json'):
-                credentials_data = {
-                    "installed": {
-                        "client_id": client_id,
-                        "project_id": os.getenv('GOOGLE_PROJECT_ID', 'default-project'),
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                        "client_secret": client_secret,
-                        "redirect_uris": [request.url_root.rstrip('/') + '/auth/callback']
-                    }
-                }
-                
-                # Save credentials to file
-                with open('credentials.json', 'w') as f:
-                    json.dump(credentials_data, f, indent=4)
-                logger.info("Created credentials.json from environment variables")
-        else:
-            # Development mode - check for credentials.json file
-            if not os.path.exists('credentials.json'):
-                logger.warning("No credentials.json found and no environment variables set")
-                return redirect(url_for('setup_credentials'))
-            
         # Get spreadsheet ID from environment or .env file
-        spreadsheet_id = os.getenv('SPREADSHEET_ID')
-        if not spreadsheet_id:
-            logger.warning("No SPREADSHEET_ID found in environment variables")
-            
-        return render_template('index.html', spreadsheet_id=spreadsheet_id)
+        spreadsheet_id_val = os.getenv('SPREADSHEET_ID')
+        
+        # If not set by env var, try to load from config file
+        if not spreadsheet_id_val:
+            try:
+                with open('config.json', 'r') as f:
+                    config = json.load(f)
+                    spreadsheet_id_val = config.get('spreadsheet_id')
+                logger.info(f"Loaded spreadsheet_id from config.json: {spreadsheet_id_val}")
+            except (FileNotFoundError, json.JSONDecodeError):
+                logger.info("config.json not found or is invalid. No spreadsheet_id loaded.")
+                spreadsheet_id_val = None
+        
+        # Pass the unresolved value to the template
+        return render_template('index.html', spreadsheet_id=spreadsheet_id_val)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}")
         logger.error(traceback.format_exc())
         return render_template('error.html', error_message=str(e)), 500
-
-@app.route('/setup', methods=['GET', 'POST'])
-def setup_credentials():
-    # Check if we're already configured via environment variables
-    client_id = os.getenv('GOOGLE_CLIENT_ID')
-    client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
-    
-    if client_id and client_secret:
-        logger.info("OAuth credentials already configured via environment variables")
-        return redirect(url_for('index'))
-    
-    if request.method == 'POST':
-        try:
-            credentials_data = {
-                "installed": {
-                    "client_id": request.form.get('client_id'),
-                    "project_id": request.form.get('project_id'),
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_secret": request.form.get('client_secret'),
-                    "redirect_uris": ["http://localhost"]
-                }
-            }
-            
-            # Save credentials to file
-            with open('credentials.json', 'w') as f:
-                json.dump(credentials_data, f, indent=4)
-                
-            return redirect(url_for('index'))
-        except Exception as e:
-            logger.error(f"Error saving credentials: {str(e)}")
-            return render_template('setup.html', error=str(e))
-    
-    return render_template('setup.html')
 
 @app.route('/auth')
 def auth():
     try:
         # Clear any existing credentials to force fresh authentication
         session.pop('credentials', None)
-        
-        # Get the redirect URI from the request, force HTTPS
-        base_url = request.url_root.rstrip('/')
-        if base_url.startswith('http://'):
-            base_url = base_url.replace('http://', 'https://')
-        redirect_uri = base_url + '/auth/callback'
+
+        # Get the redirect URI from the request, force HTTPS in production
+        redirect_uri = url_for('auth_callback', _external=True)
+        if 'http://' in redirect_uri and 'localhost' not in redirect_uri:
+             redirect_uri = redirect_uri.replace('http://', 'https://')
+
         logger.debug(f"Using redirect URI: {redirect_uri}")
-        
-        flow = InstalledAppFlow.from_client_secrets_file(
-            'credentials.json',
-            SCOPES,
+
+        flow = Flow.from_client_config(
+            get_client_config(),
+            scopes=SCOPES,
             redirect_uri=redirect_uri
         )
+
         auth_url, _ = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
@@ -250,46 +317,23 @@ def auth_callback():
                 </body>
             </html>
             """
-            
-        # Get the redirect URI from the request, force HTTPS
-        base_url = request.url_root.rstrip('/')
-        if base_url.startswith('http://'):
-            base_url = base_url.replace('http://', 'https://')
-        redirect_uri = base_url + '/auth/callback'
-        logger.debug(f"Using redirect URI: {redirect_uri}")
-            
-        flow = InstalledAppFlow.from_client_secrets_file(
-            'credentials.json',
-            SCOPES,
+
+        # Get the redirect URI from the request, force HTTPS in production
+        redirect_uri = url_for('auth_callback', _external=True)
+        if 'http://' in redirect_uri and 'localhost' not in redirect_uri:
+             redirect_uri = redirect_uri.replace('http://', 'https://')
+        
+        logger.debug(f"Using redirect URI in callback: {redirect_uri}")
+
+        flow = Flow.from_client_config(
+            get_client_config(),
+            scopes=SCOPES,
             redirect_uri=redirect_uri
         )
-        
-        # Monkey patch to handle scope changes
-        import oauthlib.oauth2.rfc6749.parameters
-        original_validate = oauthlib.oauth2.rfc6749.parameters.validate_token_parameters
-        
-        def patched_validate(params):
-            try:
-                return original_validate(params)
-            except Exception as e:
-                if "Scope has changed" in str(e):
-                    logger.info("Scope change detected - ignoring validation error")
-                    return None
-                raise e
-        
-        oauthlib.oauth2.rfc6749.parameters.validate_token_parameters = patched_validate
-        
-        try:
-            flow.fetch_token(code=code)
-            creds = flow.credentials
-        except Exception as e:
-            # Restore original function
-            oauthlib.oauth2.rfc6749.parameters.validate_token_parameters = original_validate
-            raise e
-        
-        # Restore original function
-        oauthlib.oauth2.rfc6749.parameters.validate_token_parameters = original_validate
-        
+        logger.info(f"Fetching token with redirect URI: {redirect_uri}")
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+
         # Save credentials to session
         session['credentials'] = {
             'token': creds.token,
@@ -299,11 +343,13 @@ def auth_callback():
             'client_secret': creds.client_secret,
             'scopes': creds.scopes
         }
-        
+        logger.info("Credentials saved to session.")
+
         # Also save to token.pickle for command-line use
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
-            
+            logger.info("Credentials saved to token.pickle.")
+
         return """
         <html>
             <body>
@@ -331,8 +377,29 @@ def auth_callback():
 @app.route('/check_auth')
 def check_auth():
     try:
-        # Check both Google OAuth and Gemini API key
+        logger.info("Checking authentication status...")
+        
+        if 'credentials' not in session:
+            logger.info("No credentials in session. Checking for token.pickle.")
+            if os.path.exists('token.pickle'):
+                logger.info("Loading credentials from token.pickle")
+                with open('token.pickle', 'rb') as token:
+                    credentials = pickle.load(token)
+                    # Save credentials to session
+                    session['credentials'] = {
+                        'token': credentials.token,
+                        'refresh_token': credentials.refresh_token,
+                        'token_uri': credentials.token_uri,
+                        'client_id': credentials.client_id,
+                        'client_secret': credentials.client_secret,
+                        'scopes': credentials.scopes
+                    }
+                    logger.info("Credentials loaded from token.pickle and saved to session.")
+            else:
+                logger.info("No token.pickle file found.")
+
         has_google_auth = bool(session.get('credentials'))
+        logger.info(f"Session credentials exist: {has_google_auth}")
         
         user_email = None
         if has_google_auth:
@@ -350,6 +417,8 @@ def check_auth():
                 logger.warning(f"Error type: {type(e)}")
                 logger.warning(f"Error details: {traceback.format_exc()}")
                 user_email = "Unknown User (re-authenticate to see email)"
+        else:
+            logger.info("No session credentials found.")
         
         return jsonify({
             'authenticated': has_google_auth,
@@ -382,6 +451,46 @@ def logout():
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/load_initial_data', methods=['POST'])
+def load_initial_data():
+    """
+    Loads initial data for the spreadsheet, including title, URL, and sheets,
+    without loading the event data itself. This is for faster initial page load.
+    """
+    try:
+        if 'credentials' not in session:
+            return jsonify({'success': False, 'error': 'Not authenticated', 'needs_auth': True}), 401
+
+        data = request.get_json()
+        spreadsheet_id_val = data.get('spreadsheet_id')
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
+
+        if not spreadsheet_id:
+            return jsonify({'success': False, 'error': 'Spreadsheet ID is required'}), 400
+
+        sheets_service = get_sheets_service()
+        try:
+            spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            spreadsheet_title = spreadsheet.get('properties', {}).get('title', 'Untitled Spreadsheet')
+            spreadsheet_url = spreadsheet.get('spreadsheetUrl')
+            sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', []) if not sheet.get('properties', {}).get('hidden', False)]
+            
+            return jsonify({
+                'success': True,
+                'spreadsheet_title': spreadsheet_title,
+                'spreadsheet_url': spreadsheet_url,
+                'sheets': sheets
+            })
+        except HttpError as e:
+            if e.resp.status == 404:
+                return jsonify({'success': False, 'error': 'Spreadsheet not found'}), 404
+            return jsonify({'success': False, 'error': f'Error accessing spreadsheet: {str(e)}'}), 500
+
+    except Exception as e:
+        logger.error(f"Error in load_initial_data: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/load_sheet', methods=['POST'])
 def load_sheet():
     try:
@@ -390,11 +499,22 @@ def load_sheet():
             return jsonify({'success': False, 'error': 'Not authenticated', 'needs_auth': True}), 401
 
         data = request.get_json()
-        spreadsheet_id = data.get('spreadsheet_id')
+        spreadsheet_id_val = data.get('spreadsheet_id')
         sheet_name = data.get('sheet_name')
+
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
 
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'}), 400
+
+        # Save the original value (which could be the secret path) to the config file
+        if spreadsheet_id_val:
+            try:
+                with open('config.json', 'w') as f:
+                    json.dump({'spreadsheet_id': spreadsheet_id_val}, f)
+                logger.info(f"Saved spreadsheet_id to config.json: {spreadsheet_id_val}")
+            except Exception as e:
+                logger.error(f"Error saving spreadsheet_id to config.json: {e}")
 
         # Create a custom log handler to capture debug logs
         class CaptureLogHandler(logging.Handler):
@@ -421,21 +541,22 @@ def load_sheet():
             try:
                 spreadsheet = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
                 spreadsheet_title = spreadsheet.get('properties', {}).get('title', 'Untitled Spreadsheet')
+                spreadsheet_url = spreadsheet.get('spreadsheetUrl')
                 
                 # Get available sheets if no sheet name is provided
                 if not sheet_name:
-                    sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
+                    sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', []) if not sheet.get('properties', {}).get('hidden', False)]
                     if sheets:
-                        sheet_name = sheets[0]  # Default to first sheet
+                        sheet_name = sheets[0]  # Default to first visible sheet
                     else:
-                        return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'}), 400
+                        return jsonify({'success': False, 'error': 'No visible sheets found in spreadsheet'}), 400
                 else:
-                    # Verify the requested sheet exists
-                    sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', [])]
+                    # Verify the requested sheet exists and is not hidden
+                    sheets = [sheet.get('properties', {}).get('title') for sheet in spreadsheet.get('sheets', []) if not sheet.get('properties', {}).get('hidden', False)]
                     if sheet_name not in sheets:
                         return jsonify({
                             'success': False, 
-                            'error': f'Sheet "{sheet_name}" not found',
+                            'error': f'Sheet "{sheet_name}" not found or is hidden',
                             'available_sheets': sheets
                         }), 400
             except HttpError as e:
@@ -455,6 +576,7 @@ def load_sheet():
                 return jsonify({
                     'success': True,
                     'spreadsheet_title': spreadsheet_title,
+                    'spreadsheet_url': spreadsheet_url,
                     'events': [],
                     'message': 'No data found in sheet',
                     'debug_logs': capture_handler.logs
@@ -468,6 +590,7 @@ def load_sheet():
                     return jsonify({
                         'success': True,
                         'spreadsheet_title': spreadsheet_title,
+                        'spreadsheet_url': spreadsheet_url,
                         'events': [],
                         'message': 'No events found in sheet',
                         'parser_used': 'traditional',
@@ -478,6 +601,7 @@ def load_sheet():
                 return jsonify({
                     'success': True,
                     'spreadsheet_title': spreadsheet_title,
+                    'spreadsheet_url': spreadsheet_url,
                     'events': events,
                     'parser_used': 'traditional',
                     'sheets': sheets,
@@ -526,8 +650,10 @@ def load_sheet():
 def preview_changes():
     try:
         data = request.get_json()
-        spreadsheet_id = data.get('spreadsheet_id')
+        spreadsheet_id_val = data.get('spreadsheet_id')
         sheet_name = data.get('sheet_name')
+
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
 
         if not spreadsheet_id or not sheet_name:
             return jsonify({'success': False, 'error': 'Spreadsheet ID and sheet name are required'})
@@ -599,212 +725,178 @@ def preview_changes():
         logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/apply_changes', methods=['POST'])
-def apply_changes():
-    print("DEBUG: apply_changes route called")  # This will show in console
-    # Set up log capture
-    class CaptureLogHandler(logging.Handler):
-        def __init__(self):
-            super().__init__()
-            self.logs = []
-        
-        def emit(self, record):
-            log_entry = self.format(record)
-            self.logs.append(log_entry)
+@app.route('/preview_sheet_changes', methods=['POST'])
+def preview_sheet_changes():
+    """Calculate and return the changes for a single sheet without applying them."""
+    logger.info("Starting preview_sheet_changes with logging")
     
-    capture_handler = CaptureLogHandler()
+    # Set up a log handler to capture logs for this request
+    log_stream = io.StringIO()
+    capture_handler = logging.StreamHandler(log_stream)
     capture_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     capture_handler.setFormatter(formatter)
     
-    # Add the handler to the logger
+    # Add the handler to the root logger to capture everything
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(capture_handler)
-    logger.info("Log capture handler set up successfully for apply_changes route")
-    
+
     try:
         data = request.get_json()
-        spreadsheet_id = data.get('spreadsheet_id')
+        spreadsheet_id_val = data.get('spreadsheet_id')
         sheet_name = data.get('sheet_name')
+
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
 
         if not spreadsheet_id or not sheet_name:
             return jsonify({'success': False, 'error': 'Spreadsheet ID and sheet name are required'})
 
-        logger.info("Starting apply_changes route")
-        logger.info("TEST LOG: This should appear in debug logs")
-        logger.info(f"Received data: {data}")
-        logger.info(f"Spreadsheet ID: {spreadsheet_id}")
-        logger.info(f"Sheet name: {sheet_name}")
         service = get_calendar_service()
+        sheets_service = get_sheets_service()
+
+        # Get spreadsheet title and URL
+        try:
+            spreadsheet_metadata = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            spreadsheet_title = spreadsheet_metadata.get('properties', {}).get('title', 'Untitled Spreadsheet')
+            spreadsheet_url = spreadsheet_metadata.get('spreadsheetUrl')
+        except HttpError as e:
+            logger.error(f"Error fetching spreadsheet metadata: {e}")
+            spreadsheet_title = 'Untitled Spreadsheet'
+            spreadsheet_url = '#'
+
+        # Get sheet data and parse events
+        values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
+        if not values:
+            return jsonify({
+                'success': True, 
+                'changes': {'inserted': [], 'updated': [], 'deleted': []}, 
+                'message': 'No data found in sheet',
+                'spreadsheet_title': spreadsheet_title,
+                'spreadsheet_url': spreadsheet_url
+            })
+
+        events = parse_sports_events(values, sheet_name)
         
-        # Handle special case for "All Sports"
-        if sheet_name == 'All Sports':
-            calendar_name = 'SLOHS All Sports'
-        else:
-            calendar_name = f"SLOHS {sheet_name}"
-        logger.info(f"Using calendar name: {calendar_name}")
-        
+        # Calculate stats
+        stats = {
+            'event_count': 0,
+            'first_event_date': None,
+            'last_event_date': None
+        }
+        if events:
+            stats['event_count'] = len(events)
+            dates = []
+            for event in events:
+                start = event.get('start', {})
+                if 'dateTime' in start:
+                    dates.append(parser.isoparse(start['dateTime']).date())
+                elif 'date' in start:
+                    dates.append(parser.isoparse(start['date']).date())
+            
+            logger.debug(f"Dates collected for stats: {[d.isoformat() for d in dates]}")
+
+            if dates:
+                stats['first_event_date'] = min(dates).isoformat()
+                stats['last_event_date'] = max(dates).isoformat()
+                logger.debug(f"Min date: {stats['first_event_date']}, Max date: {stats['last_event_date']}")
+
+        # Get existing events
+        calendar_name = f"SLOHS {sheet_name}"
         calendar_id = create_or_get_sports_calendar(service, calendar_name)
-        logger.info(f"Got calendar ID: {calendar_id}")
+        existing_events_dict = get_existing_events(service, calendar_id)
         
-        # Get credentials for sheets service
-        credentials = Credentials(**session['credentials'])
-        sheets_service = build('sheets', 'v4', credentials=credentials)
+        # Calculate changes
+        changes = calculate_changes(events, existing_events_dict)
         
+        log_contents = log_stream.getvalue()
+        
+        return jsonify({
+            'success': True,
+            'changes': changes,
+            'logs': log_contents,
+            'stats': stats,
+            'spreadsheet_title': spreadsheet_title,
+            'spreadsheet_url': spreadsheet_url
+        })
+
+    except Exception as e:
+        logger.error(f"Error in preview_sheet_changes: {e}")
+        logger.error(traceback.format_exc())
+        log_contents = log_stream.getvalue()
+        return jsonify({'success': False, 'error': str(e), 'logs': log_contents}), 500
+    finally:
+        root_logger.removeHandler(capture_handler)
+
+
+@app.route('/apply_changes', methods=['POST'])
+def apply_changes():
+    """Apply changes for a single sheet and return detailed results, including logs."""
+    logger.info("Starting apply_changes for a single sheet")
+    
+    # Set up a log handler to capture logs for this request
+    log_stream = io.StringIO()
+    capture_handler = logging.StreamHandler(log_stream)
+    capture_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    capture_handler.setFormatter(formatter)
+    
+    # Add the handler to the root logger to capture everything
+    root_logger = logging.getLogger()
+    root_logger.addHandler(capture_handler)
+    
+    try:
+        data = request.get_json()
+        spreadsheet_id_val = data.get('spreadsheet_id')
+        sheet_name = data.get('sheet_name')
+
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
+
+        if not spreadsheet_id or not sheet_name:
+            return jsonify({'success': False, 'error': 'Spreadsheet ID and sheet name are required'})
+
+        # Calendar name is always derived from the sheet name
+        calendar_name = f"SLOHS {sheet_name}"
+
+        logger.info(f"Applying changes for sheet: {sheet_name} to calendar: {calendar_name}")
+        
+        service = get_calendar_service()
+        sheets_service = get_sheets_service()
+
         # Get sheet data and parse events
         values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
         if not values:
             return jsonify({'success': False, 'error': 'No data found in sheet'})
 
-        # Parse events using either Gemini or traditional parser
-        logger.info("Using traditional parser")
         events = parse_sports_events(values, sheet_name)
         
-        logger.info(f"Found {len(events)} events to apply")
+        # Create or get calendar
+        calendar_id = create_or_get_sports_calendar(service, calendar_name)
         
-        if not events:
-            logger.error("No events to apply")
-            return jsonify({
-                'success': False,
-                'error': 'No events to apply'
-            }), 400
+        # Update calendar and get detailed changes
+        deleted, inserted, changed, details = update_calendar(service, events, calendar_id, return_detailed_changes=True)
         
-        # Ensure we're working with dictionaries
-        if not all(isinstance(event, dict) for event in events):
-            logger.error("Invalid event format in events")
-            for i, event in enumerate(events):
-                logger.error(f"Event {i}: {type(event)} - {event}")
-            return jsonify({
-                'success': False,
-                'error': 'Invalid event format'
-            }), 400
+        logger.info(f"Sync for {sheet_name} complete: {inserted} created, {changed} updated, {deleted} deleted.")
         
-        # Validate each event
-        for i, event in enumerate(events):
-            try:
-                logger.debug(f"\nValidating event {i+1}/{len(events)}")
-                logger.debug(f"Event data: {event}")
-                
-                # Check required fields
-                required_fields = ['summary', 'start', 'end']
-                missing_fields = [field for field in required_fields if field not in event]
-                if missing_fields:
-                    logger.error(f"Event missing required fields: {missing_fields}")
-                    logger.error(f"Event data: {event}")
-                    continue
-                
-                # Check start/end structure
-                if not isinstance(event['start'], dict) or not isinstance(event['end'], dict):
-                    logger.error(f"Invalid start/end format in event: {event}")
-                    logger.error(f"Start type: {type(event['start'])}")
-                    logger.error(f"End type: {type(event['end'])}")
-                    continue
-                
-                # Check for dateTime or date fields (handle both timed and all-day events)
-                if 'dateTime' not in event['start'] and 'date' not in event['start']:
-                    logger.error(f"Event missing dateTime or date in start: {event}")
-                    logger.error(f"Start: {event['start']}")
-                    continue
-                
-                if 'dateTime' not in event['end'] and 'date' not in event['end']:
-                    logger.error(f"Event missing dateTime or date in end: {event}")
-                    logger.error(f"End: {event['end']}")
-                    continue
-                
-                # Validate date format
-                try:
-                    if 'dateTime' in event['start']:
-                        start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
-                        end_date = datetime.fromisoformat(event['end']['dateTime'].replace('Z', '+00:00'))
-                        logger.debug(f"Valid timed event: {start_date} to {end_date}")
-                    else:
-                        # All-day event
-                        start_date = datetime.fromisoformat(event['start']['date'])
-                        end_date = datetime.fromisoformat(event['end']['date'])
-                        logger.debug(f"Valid all-day event: {start_date} to {end_date}")
-                except Exception as e:
-                    logger.error(f"Error parsing dates: {str(e)}")
-                    logger.error(f"Start: {event['start']}")
-                    logger.error(f"End: {event['end']}")
-                    continue
-                
-            except Exception as e:
-                logger.error(f"Error validating event {i+1}: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-                continue
+        # Get the logs
+        log_contents = log_stream.getvalue()
         
-        # Apply changes
-        logger.info("Applying changes to calendar")
-        update_calendar(service, events, calendar_id)
-        
-        # Get updated calendar events for preview
-        logger.debug("Fetching updated events")
-        updated_events = get_existing_events(service, calendar_id)
-        
-        # Convert to list if it's a dictionary
-        if isinstance(updated_events, dict):
-            logger.debug("Converting updated events from dict to list")
-            updated_events = list(updated_events.values())
-        
-        # Format events for response
-        logger.debug("Formatting events for response")
-        formatted_events = []
-        for i, event in enumerate(updated_events):
-            try:
-                logger.debug(f"\nFormatting event {i+1}/{len(updated_events)}")
-                logger.debug(f"Event data: {event}")
-                
-                if not isinstance(event, dict):
-                    logger.error(f"Invalid event format: {event}")
-                    continue
-                
-                # Handle both timed and all-day events
-                if 'dateTime' in event['start']:
-                    start_date = datetime.fromisoformat(event['start']['dateTime'].replace('Z', '+00:00'))
-                    formatted_date = start_date.strftime('%a, %b %d, %Y %I:%M %p')
-                elif 'date' in event['start']:
-                    start_date = datetime.fromisoformat(event['start']['date'])
-                    formatted_date = start_date.strftime('%a, %b %d, %Y') + ' (All Day)'
-                else:
-                    logger.error(f"Event has neither dateTime nor date: {event}")
-                    continue
-                
-                formatted_events.append({
-                    'summary': event['summary'],
-                    'location': event.get('location', 'N/A'),
-                    'transportation': event.get('transportation', 'N/A'),
-                    'release_time': event.get('release_time', 'N/A'),
-                    'departure_time': event.get('departure_time', 'N/A'),
-                    'formatted_date': formatted_date
-                })
-                
-            except Exception as e:
-                logger.error(f"Error formatting event {i+1}: {str(e)}")
-                logger.error(f"Error type: {type(e)}")
-                logger.error(f"Event data: {event}")
-                logger.error(traceback.format_exc())
-                continue
-        
-        logger.info(f"Successfully applied changes. Updated {len(formatted_events)} events")
-        logger.info(f"TEST LOG: Captured {len(capture_handler.logs)} log entries")
         return jsonify({
             'success': True,
-            'events': formatted_events,
-            'debug_logs': capture_handler.logs
+            'message': f"Sync for {sheet_name} complete.",
+            'events_created': inserted,
+            'events_updated': changed,
+            'events_deleted': deleted,
+            'details': details,
+            'logs': log_contents
         })
+
     except Exception as e:
         logger.error(f"Error in apply_changes: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'debug_logs': capture_handler.logs
-        }), 400
+        log_contents = log_stream.getvalue()
+        return jsonify({'success': False, 'error': str(e), 'logs': log_contents}), 500
     finally:
-        # Remove the handler to avoid duplicate logs
+        # Important: remove the handler to avoid logging to this stream in other requests
         root_logger.removeHandler(capture_handler)
 
 @app.route('/apply_all_sheets', methods=['POST'])
@@ -832,7 +924,8 @@ def apply_all_sheets():
     
     try:
         data = request.get_json()
-        spreadsheet_id = data.get('spreadsheet_id')
+        spreadsheet_id_val = data.get('spreadsheet_id')
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
 
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
@@ -986,7 +1079,8 @@ def apply_all_to_master_calendar():
     root_logger.addHandler(capture_handler)
     try:
         data = request.get_json()
-        spreadsheet_id = data.get('spreadsheet_id')
+        spreadsheet_id_val = data.get('spreadsheet_id')
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
         logger.info("Starting apply_all_to_master_calendar route")
@@ -999,7 +1093,7 @@ def apply_all_to_master_calendar():
             return jsonify({'success': False, 'error': 'No sheets found in spreadsheet'})
         all_events = []
         for sheet_name in available_sheets:
-            values = get_spreadsheet_data(sheets_.service, spreadsheet_id, sheet_name)
+            values = get_spreadsheet_data(sheets_service, spreadsheet_id, sheet_name)
             if not values:
                 continue
             events = parse_sports_events(values, sheet_name)
@@ -1046,7 +1140,8 @@ def preview_all_sheets():
     root_logger.addHandler(capture_handler)
     try:
         data = request.get_json()
-        spreadsheet_id = data.get('spreadsheet_id')
+        spreadsheet_id_val = data.get('spreadsheet_id')
+        spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
         logger.info("Starting preview_all_sheets route")
@@ -1220,7 +1315,16 @@ def get_current_calendar():
 
 
 import subprocess
-from automated_sync import main as run_automated_sync
+from automated_sync import main as run_automated_sync, run_automated_sync_stream
+@app.route('/sync_all_sheets_stream')
+def sync_all_sheets_stream():
+    """Stream the sync process using Server-Sent Events."""
+    def generate():
+        for progress in run_automated_sync_stream():
+            yield f"data: {progress}\n\n"
+    return Response(generate(), mimetype='text/event-stream')
+
+
 @app.route('/routes')
 def list_routes():
     import urllib
@@ -1257,4 +1361,4 @@ def trigger_sync():
 
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(debug=True, port=8080)

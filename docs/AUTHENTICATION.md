@@ -30,7 +30,7 @@ This method is required for the web interface (`app.py`) and for local developme
 3.  **Configure Authorized Redirect URIs**:
     This is a critical security step. You must tell Google which URLs are allowed to receive the authentication token.
     - **For local development**, add: `http://localhost:5000/auth/callback`
-    - **For a Render deployment**, add: `https://your-app-name.onrender.com/auth/callback`
+    - **For a Google Cloud Run deployment**, add: `https://your-service-name-....run.app/auth/callback`
     - **For a Cloud Run deployment**, add: `https://your-cloud-run-service-url/auth/callback`
 
 4.  **Save and Get Credentials**:
@@ -40,7 +40,7 @@ This method is required for the web interface (`app.py`) and for local developme
 ### Using OAuth 2.0 Credentials
 
 -   **Local Development**: Place the credentials in your `.env` file.
--   **Render/Cloud Run**: Add them as environment variables in the service's settings.
+-   **Cloud Run**: Add them as environment variables in the service's settings.
 
 ---
 

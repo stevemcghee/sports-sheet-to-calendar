@@ -15,6 +15,7 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.cloud import secretmanager
 
 from calendar_sync import (
     create_or_get_sports_calendar, events_are_equal, get_event_key,
@@ -34,6 +35,18 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+def access_secret_version(secret_version_id):
+    """Access the payload of the given secret version if it's a secret path."""
+    if not isinstance(secret_version_id, str) or not secret_version_id.startswith('projects/'):
+        return secret_version_id # Not a secret manager path, return as is
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        response = client.access_secret_version(name=secret_version_id)
+        return response.payload.data.decode('UTF-8')
+    except Exception as e:
+        logger.error(f"Failed to access secret version {secret_version_id}: {e}")
+        raise
 
 class SyncReporter:
     """Handles generating reports and sending email notifications."""
@@ -492,13 +505,65 @@ def send_failure_email(error_title: str, error_details: str | Exception | None =
         logger.error(f"Failed to send failure email: {e}")
 
 
+def run_automated_sync_stream():
+    """A generator function that yields progress updates for the automated sync process."""
+    logger.info("Starting automated calendar sync stream")
+    yield json.dumps({"status": "info", "message": "Starting automated calendar sync..."})
+
+    # Get configuration
+    spreadsheet_id_val = os.getenv('SPREADSHEET_ID')
+    spreadsheet_id = access_secret_version(spreadsheet_id_val)
+    if not spreadsheet_id:
+        logger.error("SPREADSHEET_ID not found in environment variables")
+        yield json.dumps({"status": "error", "message": "SPREADSHEET_ID not found in environment variables"})
+        return
+
+    # Get Google credentials
+    creds = get_google_credentials()
+    if not creds:
+        logger.error("Failed to get Google credentials")
+        yield json.dumps({"status": "error", "message": "Failed to get Google credentials"})
+        return
+
+    # Build services
+    try:
+        service = build('calendar', 'v3', credentials=creds)
+        sheets_service = build('sheets', 'v4', credentials=creds)
+        logger.info("Successfully built Google services")
+        yield json.dumps({"status": "info", "message": "Successfully built Google services."})
+    except Exception as e:
+        logger.error(f"Failed to build Google services: {e}")
+        yield json.dumps({"status": "error", "message": f"Failed to build Google services: {e}"})
+        return
+
+    # Get all available sheets
+    try:
+        available_sheets = list_available_sheets(sheets_service, spreadsheet_id)
+        logger.info(f"Found {len(available_sheets)} sheets: {available_sheets}")
+        yield json.dumps({"status": "info", "message": f"Found {len(available_sheets)} sheets to process."})
+    except Exception as e:
+        logger.error(f"Failed to get available sheets: {e}")
+        yield json.dumps({"status": "error", "message": f"Failed to get available sheets: {e}"})
+        return
+
+    # Process each sheet
+    total_sheets = len(available_sheets)
+    for i, sheet_name in enumerate(available_sheets):
+        yield json.dumps({"status": "info", "message": f"Processing sheet {i+1}/{total_sheets}: {sheet_name}"})
+        result = sync_single_sheet(service, sheets_service, spreadsheet_id, sheet_name)
+        yield json.dumps({"status": "sheet_result", "sheet_name": sheet_name, "result": result})
+
+    yield json.dumps({"status": "complete", "message": "Sync process finished."})
+
+
 def main():
     """Main function to run the automated sync."""
     logger.info("Automated sync main function called")
     logger.info("Starting automated calendar sync")
     
     # Get configuration
-    spreadsheet_id = os.getenv('SPREADSHEET_ID')
+    spreadsheet_id_val = os.getenv('SPREADSHEET_ID')
+    spreadsheet_id = access_secret_version(spreadsheet_id_val)
     if not spreadsheet_id:
         logger.error("SPREADSHEET_ID not found in environment variables")
         send_failure_email("Missing SPREADSHEET_ID environment variable")

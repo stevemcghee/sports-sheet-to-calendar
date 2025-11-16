@@ -11,6 +11,9 @@
             border-left: 4px solid #0d6efd;
         }
         .sheet-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
             margin-bottom: 1rem;
         }
         .sheet-tab {
@@ -18,11 +21,21 @@
             padding: 0.5rem 1rem;
             border: 1px solid #dee2e6;
             border-radius: 0.25rem;
-            margin-right: 0.5rem;
         }
         .sheet-tab.active {
             background-color: #0d6efd;
             color: white;
+        }
+        .updated-event-pair {
+            display: flex;
+            justify-content: space-around;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
+        .updated-event-pair > div {
+            flex: 1;
+            min-width: 300px; /* Ensure cards don't get too small */
         }
     </style>
 </head>
@@ -40,14 +53,18 @@
                 </div>
                 <button id="auth-button" class="btn btn-primary">Authenticate with Google</button>
                 <div id="auth-status" class="mt-2" style="display: none;"></div>
-                <div id="logout-section" class="mt-2" style="display: none;">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <p class="text-success mb-0">Authenticated with Google</p>
-                        <button id="logout-button" class="btn btn-outline-danger">
-                            <i class="bi bi-box-arrow-right"></i>
-                            Log Out
-                        </button>
-                    </div>
+            </div>
+        </div>
+
+        <!-- Logout Section -->
+        <div id="logout-section" class="card mb-4" style="display: none;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <p class="text-success mb-0">Authenticated with Google as <strong id="user-email"></strong></p>
+                    <button id="logout-button" class="btn btn-outline-danger">
+                        <i class="bi bi-box-arrow-right"></i>
+                        Log Out
+                    </button>
                 </div>
             </div>
         </div>
@@ -56,9 +73,13 @@
         <div id="spreadsheet-section" class="card mb-4" style="display: none;">
             <div class="card-body">
                 <h5 class="card-title">Spreadsheet Information</h5>
+                <div id="spreadsheet-details" class="mb-3" style="display: none;">
+                    <p class="mb-1"><strong>Title:</strong> <span id="spreadsheet-title"></span></p>
+                    <p class="mb-1"><strong>Link:</strong> <a id="spreadsheet-link" href="#" target="_blank">View Spreadsheet</a></p>
+                </div>
                 <div class="mb-3">
                     <label for="spreadsheet-id" class="form-label">Spreadsheet ID</label>
-                    <input type="text" class="form-control" id="spreadsheet-id" placeholder="Enter spreadsheet ID">
+                    <input type="text" class="form-control" id="spreadsheet-id" placeholder="Enter spreadsheet ID" value="{{ spreadsheet_id or '' }}">
                 </div>
                 <button id="load-sheet" class="btn btn-primary">Load Sheet</button>
                 <button id="trigger-sync" class="btn btn-secondary">Trigger Sync</button>
@@ -70,19 +91,17 @@
             <div class="card-body">
                 <h5 class="card-title">Select Sheet</h5>
                 <div id="sheet-tabs" class="sheet-tabs"></div>
+                <button id="sync-all-sports" class="btn btn-primary mt-2">Sync All Sports</button>
             </div>
         </div>
 
         <!-- Events Preview -->
         <div id="events-section" class="card mb-4" style="display: none;">
             <div class="card-body">
-                <h5 class="card-title">Events Preview</h5>
+                <h5 class="card-title" id="events-preview-heading">Events Preview</h5>
+                <div id="sheet-stats" class="mb-3"></div>
                 <div id="events-container"></div>
                 <div class="mt-3">
-                    <div class="mb-3">
-                        <label for="calendar-name" class="form-label">Calendar Name</label>
-                        <input type="text" class="form-control" id="calendar-name" value="SLOHS Sports Calendar">
-                    </div>
                     <button id="apply-changes" class="btn btn-success">Apply to Calendar</button>
                 </div>
             </div>
@@ -90,11 +109,83 @@
 
         <!-- Status Messages -->
         <div id="status-messages" class="alert" style="display: none;"></div>
+
+        <!-- Live Log Section -->
+        <div id="live-log-section" class="card mb-4" style="display: none;">
+            <div class="card-body">
+                <h5 class="card-title">Live Sync Log</h5>
+                <pre id="live-log" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 1rem; border-radius: 0.25rem;"></pre>
+            </div>
+        </div>
     </div>
 
     <script>
         let currentSheet = null;
         let currentEvents = [];
+
+        // Check authentication status on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/check_auth');
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    document.getElementById('auth-section').style.display = 'none';
+                    document.getElementById('spreadsheet-section').style.display = 'block';
+                    document.getElementById('logout-section').style.display = 'block';
+                    document.getElementById('user-email').textContent = data.user_email;
+                    showStatus('Welcome back!', 'success');
+
+                    // Automatically load spreadsheet if ID is present
+                    const spreadsheetIdInput = document.getElementById('spreadsheet-id');
+                    if (spreadsheetIdInput.value) {
+                        await loadInitialData(spreadsheetIdInput.value);
+                    }
+                } else {
+                    document.getElementById('auth-section').style.display = 'block';
+                    document.getElementById('spreadsheet-section').style.display = 'none';
+                    document.getElementById('logout-section').style.display = 'none';
+                }
+            } catch (error) {
+                showStatus('Error checking authentication status: ' + error.message, 'danger');
+            }
+        });
+
+        async function loadInitialData(spreadsheetId) {
+            showStatus('Loading spreadsheet details...', 'info');
+            try {
+                const response = await fetch('/load_initial_data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ spreadsheet_id: spreadsheetId })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Display spreadsheet title and link
+                    if (data.spreadsheet_title && data.spreadsheet_url) {
+                        document.getElementById('spreadsheet-title').textContent = data.spreadsheet_title;
+                        const spreadsheetLink = document.getElementById('spreadsheet-link');
+                        spreadsheetLink.href = data.spreadsheet_url;
+                        spreadsheetLink.textContent = data.spreadsheet_url;
+                        document.getElementById('spreadsheet-details').style.display = 'block';
+                    }
+
+                    // Display sheet tabs and load the first one
+                    if (data.sheets && data.sheets.length > 0) {
+                        displaySheetTabs(data.sheets);
+                        document.getElementById('sheet-selection').style.display = 'block';
+                        loadSheetData(spreadsheetId, data.sheets[0]);
+                    } else {
+                        showStatus('No visible sheets found in the spreadsheet.', 'warning');
+                    }
+                } else {
+                    showStatus(`Error loading initial data: ${data.error}`, 'danger');
+                }
+            } catch (error) {
+                showStatus(`Error: ${error.message}`, 'danger');
+            }
+        }
 
         // Handle authentication
         document.getElementById('auth-button').addEventListener('click', async () => {
@@ -146,10 +237,21 @@
 
         // Handle sheet loading
         document.getElementById('load-sheet').addEventListener('click', async () => {
-            const spreadsheetId = document.getElementById('spreadsheet-id').value.trim();
+            let spreadsheetId = document.getElementById('spreadsheet-id').value.trim();
             if (!spreadsheetId) {
-                showStatus('Please enter a spreadsheet ID', 'warning');
+                showStatus('Please enter a spreadsheet ID or URL', 'warning');
                 return;
+            }
+
+            // Check if the input is a URL and parse the ID
+            if (spreadsheetId.startsWith('http')) {
+                spreadsheetId = parseSpreadsheetIdFromUrl(spreadsheetId);
+                if (!spreadsheetId) {
+                    showStatus('Invalid Google Sheets URL', 'danger');
+                    return;
+                }
+                // Update the input field with the parsed ID
+                document.getElementById('spreadsheet-id').value = spreadsheetId;
             }
 
             try {
@@ -179,6 +281,11 @@
             }
         });
 
+        function parseSpreadsheetIdFromUrl(url) {
+            const match = url.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+            return match ? match[1] : null;
+        }
+
         // Handle sheet selection
         function displaySheetTabs(sheets) {
             const container = document.getElementById('sheet-tabs');
@@ -191,6 +298,9 @@
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
+                    // Clear the sport name from the title
+                    document.getElementById('events-preview-heading').textContent = 'Events Preview';
+                    document.getElementById('events-container').innerHTML = '<p>Loading events...</p>';
                     loadSheetData(document.getElementById('spreadsheet-id').value, sheet);
                 });
                 container.appendChild(tab);
@@ -201,10 +311,19 @@
             }
         }
 
-        // Load sheet data
+        // Load sheet data and preview changes
         async function loadSheetData(spreadsheetId, sheetName) {
+            console.log('Loading data and previewing changes for sheet:', sheetName);
+            document.getElementById('events-container').innerHTML = '<p>Loading changes...</p>';
+            document.getElementById('apply-changes').disabled = true;
+            
+            const logSection = document.getElementById('live-log-section');
+            const logEl = document.getElementById('live-log');
+            logSection.style.display = 'block';
+            logEl.textContent = 'Loading preview...';
+
             try {
-                const response = await fetch('/load_sheet', {
+                const response = await fetch('/preview_sheet_changes', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -216,59 +335,231 @@
                 });
 
                 const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (data.logs) {
+                    logEl.textContent = data.logs;
+                } else {
+                    logEl.textContent = 'No logs returned from preview.';
+                }
                 
                 if (data.success) {
                     currentSheet = sheetName;
-                    currentEvents = data.events || [];
-                    displayEvents(currentEvents);
+                    displayChanges(data.changes);
+                    if (data.stats) {
+                        displaySheetStats(data.stats);
+                    }
                     document.getElementById('events-section').style.display = 'block';
+
+                    // Display spreadsheet title and link
+                    if (data.spreadsheet_title && data.spreadsheet_url) {
+                        document.getElementById('spreadsheet-title').textContent = data.spreadsheet_title;
+                        const spreadsheetLink = document.getElementById('spreadsheet-link');
+                        spreadsheetLink.href = data.spreadsheet_url;
+                        spreadsheetLink.textContent = data.spreadsheet_url; // Display full URL
+                        document.getElementById('spreadsheet-details').style.display = 'block';
+                    } else {
+                        document.getElementById('spreadsheet-details').style.display = 'none';
+                    }
+
                 } else {
                     showStatus(data.error, 'danger');
+                    logEl.textContent += `\n[ERROR] ${data.error}`;
                 }
             } catch (error) {
                 showStatus('Error loading sheet data: ' + error.message, 'danger');
+                logEl.textContent += `\n[FATAL] ${error.message}`;
             }
         }
 
-        // Display events
-        function displayEvents(events) {
-            const container = document.getElementById('events-container');
-            container.innerHTML = '';
-            
-            if (events.length === 0) {
-                container.innerHTML = '<p>No events found in this sheet.</p>';
+        function displaySheetStats(stats) {
+            const container = document.getElementById('sheet-stats');
+            if (!stats || stats.event_count === 0) {
+                container.innerHTML = '';
                 return;
             }
             
-            events.forEach(event => {
-                const card = document.createElement('div');
-                card.className = 'card event-card';
-                card.innerHTML = `
-                    <div class="card-body">
-                        <h5 class="card-title">${event.summary}</h5>
-                        <p class="card-text">
-                            <strong>Start:</strong> ${new Date(event.start.dateTime).toLocaleString()}<br>
-                            <strong>End:</strong> ${new Date(event.end.dateTime).toLocaleString()}<br>
-                            <strong>Location:</strong> ${event.location}
-                        </p>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
+            const firstDate = stats.first_event_date ? new Date(stats.first_event_date + 'T00:00:00').toLocaleDateString() : 'N/A';
+            const lastDate = stats.last_event_date ? new Date(stats.last_event_date + 'T00:00:00').toLocaleDateString() : 'N/A';
+
+            container.innerHTML = `
+                <p class="mb-1"><strong>Total Events:</strong> ${stats.event_count}</p>
+                <p class="mb-1"><strong>First Event:</strong> ${firstDate}</p>
+                <p class="mb-0"><strong>Last Event:</strong> ${lastDate}</p>
+                <hr>
+            `;
+        }
+
+        // Display changes
+        function displayChanges(changes) {
+            const container = document.getElementById('events-container');
+            container.innerHTML = '';
+            
+            const { inserted = [], updated = [], deleted = [] } = changes;
+            const totalChanges = inserted.length + updated.length + deleted.length;
+
+            // Update the events preview heading
+            const eventsPreviewHeading = document.getElementById('events-preview-heading');
+            if (currentSheet) {
+                eventsPreviewHeading.textContent = `Changes for ${currentSheet}`;
+            } else {
+                eventsPreviewHeading.textContent = 'Events Preview';
+            }
+            
+            if (totalChanges === 0) {
+                container.innerHTML = '<p class="text-success">No changes needed. Calendar is already up to date.</p>';
+                document.getElementById('apply-changes').disabled = true;
+                return;
+            }
+
+            document.getElementById('apply-changes').disabled = false;
+
+            if (inserted.length > 0) {
+                const insertedHeader = document.createElement('h6');
+                insertedHeader.className = 'text-success';
+                insertedHeader.textContent = 'Events to be Added';
+                container.appendChild(insertedHeader);
+                inserted.forEach(event => container.appendChild(createEventCard(event, 'success')));
+            }
+
+            if (updated.length > 0) {
+                const updatedHeader = document.createElement('h6');
+                updatedHeader.className = 'text-warning';
+                updatedHeader.textContent = 'Events to be Updated';
+                container.appendChild(updatedHeader);
+                updated.forEach(change => container.appendChild(createUpdatedEventCards(change)));
+            }
+
+            if (deleted.length > 0) {
+                const deletedHeader = document.createElement('h6');
+                deletedHeader.className = 'text-danger';
+                deletedHeader.textContent = 'Events to be Deleted';
+                container.appendChild(deletedHeader);
+                deleted.forEach(event => container.appendChild(createEventCard(event, 'danger')));
+            }
+        }
+
+        function createEventCard(event, type, titlePrefix = '', highlight = {}) {
+            const card = document.createElement('div');
+            card.className = `card event-card border-${type} mb-2`;
+            
+            let start, end;
+            if (event.start.dateTime) {
+                start = new Date(event.start.dateTime).toLocaleString();
+                end = new Date(event.end.dateTime).toLocaleString();
+            } else {
+                start = new Date(event.start.date).toLocaleDateString() + ' (All day)';
+                end = ''; // Don't show end for all-day events to reduce clutter
+            }
+
+            const summaryHTML = highlight.summary || event.summary;
+            const startHTML = highlight.start || start;
+            const descriptionHTML = highlight.description || `<pre style="white-space: pre-wrap; font-family: inherit;">${event.description || ''}</pre>`;
+
+            card.innerHTML = `
+                <div class="card-body">
+                    <h5 class="card-title">${titlePrefix} ${summaryHTML}</h5>
+                    <p class="card-text mb-1">
+                        <strong>Start:</strong> ${startHTML}
+                    </p>
+                    <p class="card-text">
+                        <strong>Description:</strong><br>
+                        ${descriptionHTML}
+                    </p>
+                </div>
+            `;
+            return card;
+        }
+
+        function createUpdatedEventCards(change) {
+            const pairContainer = document.createElement('div');
+            pairContainer.className = 'updated-event-pair';
+
+            const highlights = compareAndHighlightEvents(change.before, change.after);
+
+            const beforeCard = createEventCard(change.before, 'secondary', 'Before:', highlights.before);
+            const afterCard = createEventCard(change.after, 'warning', 'After:', highlights.after);
+
+            pairContainer.appendChild(beforeCard);
+            pairContainer.appendChild(afterCard);
+
+            return pairContainer;
+        }
+
+        function compareAndHighlightEvents(before, after) {
+            const highlights = {
+                before: {},
+                after: {}
+            };
+
+            // Compare Summary
+            if (before.summary !== after.summary) {
+                highlights.before.summary = `<span class="text-primary">${before.summary}</span>`;
+                highlights.after.summary = `<span class="text-primary">${after.summary}</span>`;
+            }
+
+            // Compare Start Time
+            const beforeStart = before.start.dateTime ? new Date(before.start.dateTime).toLocaleString() : new Date(before.start.date).toLocaleDateString() + ' (All day)';
+            const afterStart = after.start.dateTime ? new Date(after.start.dateTime).toLocaleString() : new Date(after.start.date).toLocaleDateString() + ' (All day)';
+            if (beforeStart !== afterStart) {
+                highlights.before.start = `<span class="text-primary">${beforeStart}</span>`;
+                highlights.after.start = `<span class="text-primary">${afterStart}</span>`;
+            }
+
+            // Compare Description (line by line, ignoring whitespace)
+            const beforeDescLines = (before.description || '').split('\n');
+            const afterDescLines = (after.description || '').split('\n');
+            const beforeTrimmedSet = new Set(beforeDescLines.map(line => line.trim()));
+            const afterTrimmedSet = new Set(afterDescLines.map(line => line.trim()));
+
+            let beforeDescHtml = beforeDescLines.map(line => {
+                if (!afterTrimmedSet.has(line.trim())) {
+                    return `<span class="p-1 rounded bg-danger text-white" style="text-decoration: line-through;">- ${line}</span>`;
+                }
+                return line;
+            }).join('\n');
+
+            let afterDescHtml = afterDescLines.map(line => {
+                if (!beforeTrimmedSet.has(line.trim())) {
+                    return `<span class="p-1 rounded bg-success text-white">+ ${line}</span>`;
+                }
+                return line;
+            }).join('\n');
+
+            highlights.before.description = `<pre style="white-space: pre-wrap; font-family: inherit;">${beforeDescHtml}</pre>`;
+            highlights.after.description = `<pre style="white-space: pre-wrap; font-family: inherit;">${afterDescHtml}</pre>`;
+
+            return highlights;
+        }
+
+        function createUpdatedEventCards(change) {
+            const pairContainer = document.createElement('div');
+            pairContainer.className = 'updated-event-pair';
+
+            const beforeCard = createEventCard(change.before, 'secondary', 'Before:');
+            const afterCard = createEventCard(change.after, 'warning', 'After:');
+
+            pairContainer.appendChild(beforeCard);
+            pairContainer.appendChild(afterCard);
+
+            return pairContainer;
         }
 
         // Handle applying changes
         document.getElementById('apply-changes').addEventListener('click', async () => {
-            if (currentEvents.length === 0) {
-                showStatus('No events to apply', 'warning');
+            const spreadsheetId = document.getElementById('spreadsheet-id').value.trim();
+            if (!spreadsheetId) {
+                showStatus('Please enter a spreadsheet ID', 'warning');
                 return;
             }
 
-            const calendarName = document.getElementById('calendar-name').value.trim();
-            if (!calendarName) {
-                showStatus('Please enter a calendar name', 'warning');
-                return;
-            }
+            const logSection = document.getElementById('live-log-section');
+            const logEl = document.getElementById('live-log');
+            const applyButton = document.getElementById('apply-changes');
+
+            logSection.style.display = 'block';
+            logEl.textContent = `Starting sync for sheet: ${currentSheet}...\n`;
+            applyButton.disabled = true;
 
             try {
                 const response = await fetch('/apply_changes', {
@@ -277,20 +568,31 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        events: currentEvents,
-                        calendar_name: calendarName
+                        spreadsheet_id: spreadsheetId,
+                        sheet_name: currentSheet
                     })
                 });
 
                 const data = await response.json();
                 
+                if (data.logs) {
+                    logEl.textContent = data.logs;
+                }
+                
                 if (data.success) {
-                    showStatus(`Successfully added ${currentEvents.length} events to calendar "${calendarName}"`, 'success');
+                    const summaryMessage = `Sync Complete: ${data.events_created} created, ${data.events_updated} updated, ${data.events_deleted} deleted.`;
+                    showStatus(summaryMessage, 'success');
+                    // Re-run the preview to show that there are no more changes
+                    loadSheetData(spreadsheetId, currentSheet);
                 } else {
-                    showStatus(data.error, 'danger');
+                    showStatus(`Error: ${data.error}`, 'danger');
+                    logEl.textContent += `\n[ERROR] The server responded with an error: ${data.error}\n`;
                 }
             } catch (error) {
                 showStatus('Error applying changes: ' + error.message, 'danger');
+                logEl.textContent += `\n[FATAL] An unexpected error occurred: ${error.message}\n`;
+            } finally {
+                applyButton.disabled = false;
             }
         });
 
@@ -306,10 +608,63 @@
             }, 5000);
         }
 
+        // Handle sync all sports with live log
+        document.getElementById('sync-all-sports').addEventListener('click', () => {
+            const spreadsheetId = document.getElementById('spreadsheet-id').value.trim();
+            if (!spreadsheetId) {
+                showStatus('Please enter a spreadsheet ID or URL', 'warning');
+                return;
+            }
+
+            const logSection = document.getElementById('live-log-section');
+            const logEl = document.getElementById('live-log');
+            const syncButton = document.getElementById('sync-all-sports');
+
+            logSection.style.display = 'block';
+            logEl.textContent = '';
+            syncButton.disabled = true;
+
+            const evtSource = new EventSource('/sync_all_sheets_stream');
+
+            evtSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                let logMessage = '';
+
+                if (data.status === 'info' || data.status === 'error') {
+                    logMessage = `[${data.status.toUpperCase()}] ${data.message}\n`;
+                } else if (data.status === 'sheet_result') {
+                    const result = data.result;
+                    if (result.success) {
+                        logMessage = `[SUCCESS] Sheet "${data.sheet_name}": ${result.events_created} created, ${result.events_updated} updated, ${result.events_deleted} deleted.\n`;
+                    } else {
+                        logMessage = `[ERROR] Sheet "${data.sheet_name}": ${result.error}\n`;
+                    }
+                } else if (data.status === 'complete') {
+                    logMessage = `\n[COMPLETE] ${data.message}\n`;
+                    evtSource.close();
+                    syncButton.disabled = false;
+                }
+                
+                logEl.textContent += logMessage;
+                logEl.scrollTop = logEl.scrollHeight; // Auto-scroll to bottom
+            };
+
+            evtSource.onerror = function(err) {
+                console.error("EventSource failed:", err);
+                logEl.textContent += "\n[ERROR] Connection to server lost. Sync may have been interrupted.\n";
+                evtSource.close();
+                syncButton.disabled = false;
+            };
+        });
+
         // Handle sync trigger
         document.getElementById('trigger-sync').addEventListener('click', async () => {
+            const triggerButton = document.getElementById('trigger-sync');
+            triggerButton.disabled = true;
+            showStatus('Sync in progress...', 'info');
+
             try {
-                const response = await fetch('/trigger_sync');
+                const response = await fetch('/trigger-sync');
                 const data = await response.json();
                 
                 if (data.success) {
@@ -319,6 +674,8 @@
                 }
             } catch (error) {
                 showStatus('Error triggering sync: ' + error.message, 'danger');
+            } finally {
+                triggerButton.disabled = false;
             }
         });
     </script>

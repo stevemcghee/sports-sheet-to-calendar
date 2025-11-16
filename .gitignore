@@ -38,9 +38,14 @@ credentials.json
 token.pickle
 out.log
 *.log
-
-# Google Cloud
-.gcloud/
-*.key
-*.json 
+service-account-key.json
 sync_history.db
+
+# Testing
+.pytest_cache/
+
+# Debugging
+debug/
+
+# Backups
+*.bak

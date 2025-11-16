@@ -5,6 +5,7 @@ metadata:
   annotations:
     run.googleapis.com/ingress: all
     run.googleapis.com/execution-environment: gen2
+    run.googleapis.com/launch-stage: BETA
 spec:
   template:
     metadata:
@@ -12,15 +13,15 @@ spec:
         run.googleapis.com/cpu-throttling: "false"
         run.googleapis.com/execution-environment: gen2
         run.googleapis.com/memory: 1Gi
-        run.googleapis.com/cpu: 1
+        run.googleapis.com/cpu: "1"
         run.googleapis.com/timeout: 300s
-        run.googleapis.com/concurrency: 80
-        run.googleapis.com/max-instances: 10
+        run.googleapis.com/concurrency: "80"
+        run.googleapis.com/max-instances: "10"
     spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-        - image: gcr.io/PROJECT_ID/calendar-sync:latest
+        - image: gcr.io/stevemcghee-slosports/calendar-sync:20251115-162833
           ports:
             - containerPort: 5000
           env:
@@ -28,6 +29,16 @@ spec:
               value: "production"
             - name: PYTHONUNBUFFERED
               value: "1"
+            - name: SPREADSHEET_ID
+              value: "projects/stevemcghee-slosports/secrets/spreadsheet-id/versions/latest"
+            - name: FLASK_SECRET_KEY
+              value: "projects/stevemcghee-slosports/secrets/flask-secret-key/versions/latest"
+            - name: GOOGLE_CLIENT_ID
+              value: "projects/stevemcghee-slosports/secrets/google-client-id/versions/latest"
+            - name: GOOGLE_CLIENT_SECRET
+              value: "projects/stevemcghee-slosports/secrets/google-client-secret/versions/latest"
+            - name: GOOGLE_REDIRECT_URI
+              value: "https://calendar-sync-927659207918.us-central1.run.app/auth/callback"
           resources:
             limits:
               cpu: "1"
@@ -44,7 +55,6 @@ spec:
             httpGet:
               path: /
               port: 5000
-            initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3 
