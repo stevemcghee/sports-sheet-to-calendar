@@ -811,13 +811,33 @@ def preview_sheet_changes():
         
         log_contents = log_stream.getvalue()
         
+        # Get all available sheets to generate links for all calendars
+        all_sheet_names = list_available_sheets(sheets_service, spreadsheet_id)
+        calendars_info = []
+        for sheet in all_sheet_names:
+            # Don't create calendars for sheets that don't represent sports
+            if sheet.lower() in ['all sports', 'template', 'instructions']:
+                continue
+            calendar_name = f"SLOHS {sheet}"
+            # Use the service from the current request context
+            calendar_id = create_or_get_sports_calendar(service, calendar_name)
+            if calendar_id:
+                subscription_link = f"https://calendar.google.com/calendar/ical/{calendar_id}/public/basic.ics"
+                preview_link = f"https://calendar.google.com/calendar/embed?src={calendar_id}&ctz=America/Los_Angeles"
+                calendars_info.append({
+                    "name": sheet,
+                    "subscription_link": subscription_link,
+                    "preview_link": preview_link
+                })
+
         return jsonify({
             'success': True,
             'changes': changes,
             'logs': log_contents,
             'stats': stats,
             'spreadsheet_title': spreadsheet_title,
-            'spreadsheet_url': spreadsheet_url
+            'spreadsheet_url': spreadsheet_url,
+            'calendars': calendars_info
         })
 
     except Exception as e:

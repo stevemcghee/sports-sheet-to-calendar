@@ -91,6 +91,7 @@
             <div class="card-body">
                 <h5 class="card-title">Select Sheet</h5>
                 <div id="sheet-tabs" class="sheet-tabs"></div>
+                <div id="calendar-links-container" class="mb-3"></div>
                 <button id="sync-all-sports" class="btn btn-primary mt-2">Sync All Sports</button>
             </div>
         </div>
@@ -349,6 +350,9 @@
                     if (data.stats) {
                         displaySheetStats(data.stats);
                     }
+                    if (data.calendars) {
+                        displayCalendarLinks(data.calendars);
+                    }
                     document.getElementById('events-section').style.display = 'block';
 
                     // Display spreadsheet title and link
@@ -370,6 +374,25 @@
                 showStatus('Error loading sheet data: ' + error.message, 'danger');
                 logEl.textContent += `\n[FATAL] ${error.message}`;
             }
+        }
+
+        function displayCalendarLinks(calendars) {
+            const container = document.getElementById('calendar-links-container');
+            container.innerHTML = '';
+
+            if (!calendars || calendars.length === 0) {
+                return;
+            }
+
+            calendars.forEach(calendar => {
+                const p = document.createElement('p');
+                p.innerHTML = `
+                    <strong>${calendar.name}:</strong> 
+                    <a href="${calendar.subscription_link}">subscribe</a>, 
+                    <a href="${calendar.preview_link}" target="_blank">preview</a>
+                `;
+                container.appendChild(p);
+            });
         }
 
         function displaySheetStats(stats) {
@@ -680,4 +703,5 @@
         });
     </script>
 </body>
-</html> 
+</html>
+ 

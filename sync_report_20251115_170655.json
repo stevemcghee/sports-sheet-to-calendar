@@ -1,0 +1,461 @@
+{
+  "timestamp": "2025-11-15T17:06:27.249738",
+  "sheets_processed": 2,
+  "total_events_processed": 33,
+  "total_events_created": 33,
+  "total_events_updated": 0,
+  "total_events_deleted": 0,
+  "errors": [],
+  "parsing_errors": [],
+  "sheet_details": {
+    "Cross Country": {
+      "success": true,
+      "events_created": 12,
+      "events_updated": 0,
+      "events_deleted": 0,
+      "total_events": 12,
+      "details": {
+        "inserted": [
+          {
+            "summary": "Madonna Mountain (Cerro San Luis) Time Trial Intersquad at Laguna Lake park",
+            "description": "Location: Laguna Lake park\nTime: 9:00 AM\nTransportation: self",
+            "location": "Laguna Lake park",
+            "start": {
+              "dateTime": "2025-08-23T09:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-08-23T11:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Big Ditch at Talley Fields",
+            "description": "Location: Talley Fields\nTime: 8:00 AM\nTransportation: bus x2\nDeparture Time: 6:20 AM",
+            "location": "Talley Fields",
+            "start": {
+              "dateTime": "2025-09-06T08:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-06T10:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Morro Bay at Morro Bay High",
+            "description": "Location: Morro Bay High\nTime: 8:00 AM\nTransportation: bus x2\nDeparture Time: 6:20 AM",
+            "location": "Morro Bay High",
+            "start": {
+              "dateTime": "2025-09-13T08:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-13T10:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Ojai Invitational at Lake Casitas Campground",
+            "description": "Location: Lake Casitas Campground\nTime: 8:55 AM\nTransportation: 4 x vans\nRelease Time: lunch Fri\nDeparture Time: 1:00 PM Fri",
+            "location": "Lake Casitas Campground",
+            "start": {
+              "dateTime": "2025-09-20T08:55:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-20T10:55:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Goose Chase at Waller Park, Santa Maria",
+            "description": "Location: Waller Park, Santa Maria\nTime: 9:30 AM\nTransportation: bus x2\nDeparture Time: 7:30 AM",
+            "location": "Waller Park, Santa Maria",
+            "start": {
+              "dateTime": "2025-09-27T09:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-27T11:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "All Schools Mid Season Dual at Santa Maria Elks Rodeo",
+            "description": "Location: Santa Maria Elks Rodeo\nTime: 8:30 AM\nTransportation: bus x2\nDeparture Time: 6:15 AM",
+            "location": "Santa Maria Elks Rodeo",
+            "start": {
+              "dateTime": "2025-10-04T08:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-04T10:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Clovis Invite at Woodward Park",
+            "description": "Location: Woodward Park\nTime: TBA\nTransportation: vans (4?)",
+            "location": "Woodward Park",
+            "start": {
+              "date": "2025-10-10"
+            },
+            "end": {
+              "date": "2025-10-11"
+            }
+          },
+          {
+            "summary": "Clovis Night at Clovis North High",
+            "description": "Location: Clovis North High\nTime: 6:20 PM\nTransportation: 1 bus/ 4 vans\nDeparture Time: 1:30 PM",
+            "location": "Clovis North High",
+            "start": {
+              "dateTime": "2025-10-24T18:20:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-24T20:20:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "SLO County Championships (Senior Night!) at Laguna Lake Golf Course",
+            "description": "Location: Laguna Lake Golf Course\nTransportation: self",
+            "location": "Laguna Lake Golf Course",
+            "start": {
+              "date": "2025-11-01"
+            },
+            "end": {
+              "date": "2025-11-02"
+            }
+          },
+          {
+            "summary": "League Finals- All Schools at Santa Maria Elks Rodeo",
+            "description": "Location: Santa Maria Elks Rodeo\nTransportation: bus x 2\nDeparture Time: 7:00 AM",
+            "location": "Santa Maria Elks Rodeo",
+            "start": {
+              "date": "2025-11-08"
+            },
+            "end": {
+              "date": "2025-11-09"
+            }
+          },
+          {
+            "summary": "CIF-CS Championships at Woodward Park",
+            "description": "Location: Woodward Park\nTransportation: Vans x 3\nDeparture Time: 7:00 AM",
+            "location": "Woodward Park",
+            "start": {
+              "date": "2025-11-20"
+            },
+            "end": {
+              "date": "2025-11-21"
+            }
+          },
+          {
+            "summary": "CIF-State Championships at Woodward Park",
+            "description": "Location: Woodward Park\nTransportation: vans\nDeparture Time: Noon",
+            "location": "Woodward Park",
+            "start": {
+              "date": "2025-11-29"
+            },
+            "end": {
+              "date": "2025-11-30"
+            }
+          }
+        ],
+        "updated": [],
+        "deleted": []
+      }
+    },
+    "VAR Girls Tennis": {
+      "success": true,
+      "events_created": 21,
+      "events_updated": 0,
+      "events_deleted": 0,
+      "total_events": 21,
+      "details": {
+        "inserted": [
+          {
+            "summary": "Rocklin at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-08-28T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-08-28T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Oak Ridge at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-08-29T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-08-29T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Chico at SLOHS",
+            "description": "Location: SLOHS\nTime: 9:00 AM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-08-30T09:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-08-30T11:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "San Marcos at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-09-09T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-09T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Clovis West at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-09-11T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-11T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Sanger at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-09-12T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-12T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Arroyo Grande at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-09-15T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-15T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "St. Joseph  at St. Joseph",
+            "description": "Location: St. Joseph\nTime: 3:00 PM\nTransportation: Bus\nDeparture Time: 12:45 PM",
+            "location": "St. Joseph",
+            "start": {
+              "dateTime": "2025-09-18T15:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-18T17:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Stockdale at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-09-19T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-19T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Santa Ynez  at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-09-25T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-25T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Lompoc at Lompoc",
+            "description": "Location: Lompoc\nTime: 2:30 PM\nTransportation: Bus\nRelease Time: 12:00 PM\nDeparture Time: 12:15 PM",
+            "location": "Lompoc",
+            "start": {
+              "dateTime": "2025-09-30T14:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-09-30T16:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Arroyo Grande at Arroyo Grande",
+            "description": "Location: Arroyo Grande\nTime: 3:30 PM\nTransportation: Bus\nRelease Time: 1:30 PM\nDeparture Time: 1:45 PM",
+            "location": "Arroyo Grande",
+            "start": {
+              "dateTime": "2025-10-02T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-02T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "St. Joeseph  at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-10-07T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-07T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Santa Ynez  at Santa Ynez",
+            "description": "Location: Santa Ynez\nTime: 2:30 PM\nTransportation: Bus\nRelease Time: 11:45 AM\nDeparture Time: 12:00 PM",
+            "location": "Santa Ynez",
+            "start": {
+              "dateTime": "2025-10-15T14:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-15T16:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Lompoc (Senior Night) at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-10-16T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-16T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "League Prelims at SLOHS",
+            "description": "Location: SLOHS\nTime: 9:00 AM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-10-22T09:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-22T11:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "League Finals at SLOHS",
+            "description": "Location: SLOHS\nTime: 12:00 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-10-23T12:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-23T14:00:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "CIF Team at SLOHS",
+            "description": "Location: SLOHS\nTime: 3:30 PM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-10-30T15:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-10-30T17:30:00-07:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "CIF Team - Clovis North at Clovis North",
+            "description": "Location: Clovis North\nTime: 3:00 PM\nTransportation: vans",
+            "location": "Clovis North",
+            "start": {
+              "dateTime": "2025-11-04T15:00:00-08:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-11-04T17:00:00-08:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "Area Individuals at SLOHS",
+            "description": "Location: SLOHS\nTime: 9:00 AM",
+            "location": "SLOHS",
+            "start": {
+              "dateTime": "2025-11-07T09:00:00-08:00",
+              "timeZone": "America/Los_Angeles"
+            },
+            "end": {
+              "dateTime": "2025-11-07T11:00:00-08:00",
+              "timeZone": "America/Los_Angeles"
+            }
+          },
+          {
+            "summary": "CIF Individuals at Garces Memorial",
+            "description": "Location: Garces Memorial\nTime: TBA",
+            "location": "Garces Memorial",
+            "start": {
+              "date": "2025-11-14"
+            },
+            "end": {
+              "date": "2025-11-16"
+            }
+          }
+        ],
+        "updated": [],
+        "deleted": []
+      }
+    }
+  },
+  "summary": {
+    "total_changes": 33,
+    "has_changes": true,
+    "has_errors": false,
+    "success_rate": 100.0
+  }
+}

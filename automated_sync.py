@@ -435,11 +435,17 @@ def send_email_notification(subject, html_content, to_email=None):
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     smtp_username = os.getenv('SMTP_USERNAME')
     smtp_password = os.getenv('SMTP_PASSWORD')
-    from_email = os.getenv('FROM_EMAIL', smtp_username)
+    from_email = access_secret_version(os.getenv('FROM_EMAIL', smtp_username))
     
+    smtp_username = access_secret_version(smtp_username)
+    smtp_password = access_secret_version(smtp_password)
+
     if not all([smtp_server, smtp_username, smtp_password]):
         logger.warning("Email configuration incomplete. Skipping email notification.")
         return False
+    
+    logger.debug(f"Attempting to send email with username: {smtp_username[:5]}... (first 5 chars)")
+    logger.debug(f"SMTP Password (masked): {smtp_password[:2]}...{smtp_password[-2:]}")
     
     # Build recipient list and always include smcghee@gmail.com
     recipients: list[str] = []
@@ -570,7 +576,7 @@ def main():
         return False
     
     send_email = os.getenv('SEND_EMAIL', 'true').lower() == 'true'
-    to_email = os.getenv('TO_EMAIL')
+    to_email = access_secret_version(os.getenv('TO_EMAIL'))
     
     # Get Google credentials
     creds = get_google_credentials()
