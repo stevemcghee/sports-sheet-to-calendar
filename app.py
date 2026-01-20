@@ -1106,8 +1106,7 @@ def apply_all_to_master_calendar():
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
         logger.info("Starting apply_all_to_master_calendar route")
         service = get_calendar_service()
-        credentials = Credentials(**session['credentials'])
-        sheets_service = build('sheets', 'v4', credentials=credentials)
+        sheets_service = get_sheets_service()
         # Get all available sheets
         available_sheets = list_available_sheets(sheets_service, spreadsheet_id)
         if not available_sheets:

@@ -992,7 +992,7 @@ def get_event_key(event):
     # Get start date
     if 'dateTime' in start:
         dt = parser.isoparse(start['dateTime'])
-        start_date_str = dt.astimezone(pytz.utc).date().isoformat() # Get date in UTC
+        start_date_str = dt.date().isoformat() # Use local date, not UTC
     elif 'date' in start:
         start_date_str = start['date']
     else:
