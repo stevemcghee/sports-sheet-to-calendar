@@ -284,7 +284,7 @@ def parse_date(date_str):
         return start_date, end_date
 
     # Shorthand range with year: 2/15-17/2025 (MM/DD-DD/YYYY)
-    range_with_year_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
+    range_with_year_match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{4})', date_str)
     if range_with_year_match:
         month, start_day, end_day, year = map(int, range_with_year_match.groups())
         start_date = date(year, month, start_day)
@@ -653,14 +653,19 @@ def list_available_sheets(service, spreadsheet_id):
         spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         all_sheets = spreadsheet.get('sheets', [])
         
+        
+        SKIPPED_SHEET_NAMES = ['tourney doc', 'instructions', 'template']
         visible_sheets = []
         logger.info("Available sheets:")
         for sheet in all_sheets:
-            if not sheet['properties'].get('hidden', False):
-                visible_sheets.append(sheet['properties']['title'])
-                logger.info(f"- {sheet['properties']['title']}")
+            sheet_title = sheet['properties']['title']
+            if not sheet['properties'].get('hidden', False) and sheet_title.lower() not in SKIPPED_SHEET_NAMES:
+                visible_sheets.append(sheet_title)
+                logger.info(f"- {sheet_title}")
+            elif sheet_title.lower() in SKIPPED_SHEET_NAMES:
+                logger.info(f"- (Skipped) {sheet_title}")
             else:
-                logger.info(f"- (Hidden) {sheet['properties']['title']}")
+                logger.info(f"- (Hidden) {sheet_title}")
         
         return visible_sheets
     except Exception as e:
