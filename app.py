@@ -1,8 +1,8 @@
-from flask import Flask, Response, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, Response, render_template, request, jsonify, session, url_for
 from calendar_sync import (
     get_spreadsheet_data, parse_sports_events,
     create_or_get_sports_calendar, update_calendar, get_existing_events,
-    events_are_equal, list_available_sheets, get_event_key, calculate_changes
+    events_are_equal, list_available_sheets, calculate_changes
 )
 from googleapiclient.discovery import build
 from google.auth.exceptions import RefreshError
@@ -18,10 +18,10 @@ from google_auth_oauthlib.flow import Flow
 import pickle
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
-import pytz
 from googleapiclient.errors import HttpError
 from dateutil import parser
 from google.cloud import secretmanager
+from automated_sync import main as run_automated_sync, run_automated_sync_stream
 
 # Load environment variables
 load_dotenv()
@@ -1272,7 +1272,7 @@ def get_current_calendar():
         # Try to get existing calendar
         try:
             calendar_id = create_or_get_sports_calendar(service, calendar_name)
-        except Exception as e:
+        except Exception:
             # If calendar doesn't exist yet, return empty list
             return jsonify({
                 'success': True,
@@ -1335,8 +1335,6 @@ def get_current_calendar():
 
 
 
-import subprocess
-from automated_sync import main as run_automated_sync, run_automated_sync_stream
 @app.route('/sync_all_sheets_stream')
 def sync_all_sheets_stream():
     """Stream the sync process using Server-Sent Events."""

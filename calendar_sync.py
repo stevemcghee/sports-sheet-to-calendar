@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, time as dtime, date
 from dateutil import parser
 from google.oauth2 import service_account
 from google.auth import default
-from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -15,7 +14,6 @@ from tqdm import tqdm
 import sys
 import io
 import re
-import calendar
 from dataclasses import dataclass
 import traceback
 import pytz
@@ -44,7 +42,7 @@ class ScrollingHandler(logging.Handler):
             terminal_size = shutil.get_terminal_size()
             self.terminal_height = terminal_size.lines - 2  # Reserve space for progress bar
             self.terminal_width = terminal_size.columns
-        except:
+        except Exception:
             self.terminal_height = 20  # Default height
             self.terminal_width = 80  # Default width
             
@@ -78,6 +76,10 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Ensure the root logger also outputs to stdout for tests
+logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
+logging.getLogger().setLevel(logging.DEBUG)
 
 # Prevent other loggers from writing to stdout/stderr
 logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
@@ -228,37 +230,60 @@ def parse_date(date_str):
     logger.debug(f"Parsing date string: '{date_str}'")
 
     today = datetime.now()
+    logger.debug(f"Current today.year: {today.year}")
     crossover_month = 8  # August is the typical start of a school year
 
-    def get_year_for_month(month):
-        """Determine the correct year for a month based on a school year calendar."""
-        year = today.year
-        if today.month >= crossover_month and month < crossover_month:
-            year += 1
-        elif today.month < crossover_month and month >= crossover_month:
-            year -= 1
-        return year
+    def _infer_year(month, default_year):
+        """Infer year for a month based on school year logic relative to default_year."""
+        logger.debug(f"Inferring year for month: {month}, default_year: {default_year}")
+        if month >= crossover_month: 
+            calculated_year = default_year
+        else:
+            calculated_year = default_year + 1
+        logger.debug(f"Calculated year: {calculated_year}")
+        return calculated_year
+
+    def _parse_single_date(single_date_str, context_year=None):
+        """Parses a single date string, inferring year if missing."""
+        # Try MM/DD/YYYY
+        try:
+            return datetime.strptime(single_date_str, "%m/%d/%Y").date()
+        except ValueError:
+            pass
+
+        # Try MM/DD/YY
+        try:
+            return datetime.strptime(single_date_str, "%m/%d/%y").date()
+        except ValueError:
+            pass
+
+        # Try MM/DD (no year)
+        try:
+            d_no_year = datetime.strptime(single_date_str, "%m/%d")
+            if context_year:
+                year_to_use = context_year
+            else:
+                year_to_use = _infer_year(d_no_year.month, default_year=today.year)
+            return date(year_to_use, d_no_year.month, d_no_year.day)
+        except ValueError:
+            raise ValueError(f"Invalid date format: {single_date_str}")
 
     # Reject invalid formats
     if 'week of' in date_str.lower() or ' or ' in date_str.lower() or ',' in date_str:
         logger.debug(f"Rejecting date with invalid keywords or format: '{date_str}'")
         raise ValueError(f"Invalid date format: {date_str}")
 
-    # Handle ranges first
-    # Full range: 8/4/2025 - 8/7/2025 (or similar)
-    full_range_match = re.match(r'(\d{1,2}/\d{1,2}/\d{2,4})\s*-\s*(\d{1,2}/\d{1,2}/\d{2,4})', date_str)
+    # Specific range formats first
+    # Full range: 8/4/2025 - 8/7/2025 (MM/DD/YYYY - MM/DD/YYYY)
+    full_range_match = re.match(r'(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d{1,2}/\d{1,2}/\d{4})', date_str)
     if full_range_match:
         start_str, end_str = full_range_match.groups()
-        try:
-            start_date, _ = parse_date(start_str) # Recursive call for single date parsing
-            end_date, _ = parse_date(end_str)
-            logger.debug(f"Parsed full date range: {start_date} to {end_date}")
-            return start_date, end_date
-        except ValueError as e:
-            logger.debug(f"Could not parse full range '{date_str}': {e}")
-            # Fall through to other regexes
+        start_date = _parse_single_date(start_str)
+        end_date = _parse_single_date(end_str)
+        logger.debug(f"Parsed full date range: {start_date} to {end_date}")
+        return start_date, end_date
 
-    # Shorthand range with year: 2/15-17/2025
+    # Shorthand range with year: 2/15-17/2025 (MM/DD-DD/YYYY)
     range_with_year_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
     if range_with_year_match:
         month, start_day, end_day, year = map(int, range_with_year_match.groups())
@@ -267,119 +292,64 @@ def parse_date(date_str):
         logger.debug(f"Parsed shorthand range with year: {start_date} to {end_date}")
         return start_date, end_date
 
-    # Shorthand range, different month, no year: 8/4 - 8/7
+    # Shorthand range, different month, no year: 8/4 - 8/7 (MM/DD - MM/DD)
     range_no_year_diff_month_match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})', date_str)
     if range_no_year_diff_month_match:
         start_month, start_day, end_month, end_day = map(int, range_no_year_diff_month_match.groups())
-        start_year = get_year_for_month(start_month)
-        end_year = get_year_for_month(end_month)
-        start_date = date(start_year, start_month, start_day)
-        end_date = date(end_year, end_month, end_day)
+        range_year = _infer_year(start_month, default_year=today.year)
+        start_date = date(range_year, start_month, start_day)
+        end_date = date(range_year, end_month, end_day)
+        if end_month < start_month:
+            end_date = date(range_year + 1, end_month, end_day)
         logger.debug(f"Parsed range with different months, no year: {start_date} to {end_date}")
         return start_date, end_date
 
-    # Shorthand range, same month, no year: 9/5-6
+    # Shorthand range, same month, no year: 9/5-6 (MM/DD-DD)
     range_no_year_same_month_match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})', date_str)
     if range_no_year_same_month_match:
         month, start_day, end_day = map(int, range_no_year_same_month_match.groups())
-        year = get_year_for_month(month)
+        year = _infer_year(month, default_year=today.year)
         start_date = date(year, month, start_day)
         end_date = date(year, month, end_day)
         logger.debug(f"Parsed range with same month, no year: {start_date} to {end_date}")
         return start_date, end_date
 
-    # Handle single dates
-    try:
-        # MM/DD/YYYY
-        d = datetime.strptime(date_str, "%m/%d/%Y").date()
-        logger.debug(f"Parsed single date (YYYY): {d}")
-        return d, None
-    except ValueError:
-        try:
-            # MM/DD/YY
-            d = datetime.strptime(date_str, "%m/%d/%y").date()
-            logger.debug(f"Parsed single date (YY): {d}")
-            return d, None
-        except ValueError:
-            try:
-                # MM/DD (no year)
-                d_no_year = datetime.strptime(date_str, "%m/%d")
-                year = get_year_for_month(d_no_year.month)
-                d = date(year, d_no_year.month, d_no_year.day)
-                logger.debug(f"Parsed single date (no year): {d}")
-                return d, None
-            except ValueError:
-                logger.debug(f"Failed to parse date '{date_str}' with all formats.")
-                raise ValueError(f"Invalid date format: {date_str}")
+    # Generic range (e.g., "7/28-8/1/2025" where only end has year, or "7/28-8/1")
+    # This should be the last resort for ranges
+    parts = date_str.split('-')
+    if len(parts) > 1:
+        start_part_str = parts[0].strip()
+        end_part_str = parts[-1].strip() # Take the last part as the end date
 
-def parse_time(time_str):
-    """Parse time string and return a datetime.time object or None for all-day events."""
-    if not time_str or time_str.lower() in ('tbd', 'all day', 'all-day') or looks_like_location(time_str):
-        return None
+        explicit_year = None
+        # Try to find an explicit year in the end_part_str first
+        year_match = re.search(r'\d{1,2}/\d{1,2}/(\d{4})', end_part_str)
+        if year_match:
+            explicit_year = int(year_match.group(1))
+        else:
+            year_match_short = re.search(r'\d{1,2}/\d{1,2}/(\d{2})', end_part_str)
+            if year_match_short:
+                two_digit_year = int(year_match_short.group(1))
+                explicit_year = 2000 + two_digit_year if two_digit_year < 50 else 1900 + two_digit_year
+        
+        start_date = _parse_single_date(start_part_str, context_year=explicit_year)
+        end_date = _parse_single_date(end_part_str, context_year=explicit_year)
 
-    # Extract first time if multiple times are present (e.g., "2:00 dive, 3:00 swim")
-    first_time_match = re.search(r'(\d{1,2})(?::(\d{2}))?\s*(?:am|pm)?', time_str.lower())
-    if not first_time_match:
-        return None
+        # If end_date is before start_date, and no explicit year was given,
+        # it might mean the range crosses a year boundary.
+        if end_date < start_date and explicit_year is None:
+            # Try to infer year for end_date as next year
+            end_date = _parse_single_date(end_part_str, context_year=start_date.year + 1)
+            if end_date < start_date: # If still before, something is wrong
+                raise ValueError(f"Invalid date range: {date_str}")
 
-    hour = int(first_time_match.group(1))
-    minute = int(first_time_match.group(2)) if first_time_match.group(2) else 0
-
-    # Assume times between 1 and 11 are PM
-    if 1 <= hour <= 11 and 'am' not in time_str.lower():
-        hour += 12
-
-    return dtime(hour=hour, minute=minute)
-
-def parse_date_range(date_str):
-    """Parse a date range string (e.g., '2/15-17/2025', '7/28-8/1/2025', '12/28/2024-1/5/2025')."""
-    date_str = date_str.strip()
-    
-    # Case 1: Full start and end dates with year (e.g., "12/28/2024-1/5/2025")
-    match = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-    if match:
-        start_month, start_day, start_year, end_month, end_day, end_year = map(int, match.groups())
-        start_date = date(start_year, start_month, start_day)
-        end_date = date(end_year, end_month, end_day)
+        logger.debug(f"Parsed generic date range: {start_date} to {end_date}")
         return start_date, end_date
 
-    # Case 2: Month/Day-Month/Day/Year (e.g., "7/28-8/1/2025")
-    match = re.match(r'(\d{1,2})/(\d{1,2})\s*-\s*(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-    if match:
-        start_month, start_day, end_month, end_day, year = map(int, match.groups())
-        start_date = date(year, start_month, start_day)
-        end_date = date(year, end_month, end_day)
-        return start_date, end_date
-
-    # Case 3: Month/Day-Day/Year (e.g., "2/15-17/2025")
-    match = re.match(r'(\d{1,2})/(\d{1,2})-(\d{1,2})/(\d{4})', date_str)
-    if match:
-        month, start_day, end_day, year = map(int, match.groups())
-        start_date = date(year, month, start_day)
-        end_date = date(year, month, end_day)
-        return start_date, end_date
-
-    raise ValueError(f"Invalid date range format: {date_str}")
-
-def format_date(date_str):
-    """Format date string to YYYY-MM-DD format."""
-    try:
-        # Split the date string into month, day, and year
-        parts = date_str.split('/')
-        if len(parts) != 3:
-            raise ValueError(f"Invalid date format: {date_str}")
-        
-        month, day, year = parts
-        
-        # Ensure month and day are two digits
-        month = month.zfill(2)
-        day = day.zfill(2)
-        
-        # Format as YYYY-MM-DD
-        return f"{year}-{month}-{day}"
-    except Exception as e:
-        logging.error(f"Error formatting date {date_str}: {str(e)}")
-        raise
+    # Handle single dates if not a range
+    d = _parse_single_date(date_str)
+    logger.debug(f"Parsed single date: {d}")
+    return d, None
 
 def parse_single_time(time_str):
     """Parse a single time string into a datetime.time object."""
@@ -1006,7 +976,6 @@ def fix_event_times(event):
     except Exception as e:
         return False, f"Error fixing times: {str(e)}"
 
-import pytz
 
 def get_event_key(event):
     """Generate a unique key for an event based on its start date and summary."""
@@ -1018,8 +987,7 @@ def get_event_key(event):
     # Get start date
     if 'dateTime' in start:
         dt = parser.isoparse(start['dateTime'])
-        local_tz = pytz.timezone('America/Los_Angeles')
-        start_date_str = dt.astimezone(local_tz).date().isoformat() # Get date in local timezone
+        start_date_str = dt.astimezone(pytz.utc).date().isoformat() # Get date in UTC
     elif 'date' in start:
         start_date_str = start['date']
     else:

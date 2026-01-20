@@ -5,8 +5,6 @@ Test script to debug event comparison issues
 
 import os
 import pickle
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from calendar_sync import get_existing_events, get_event_key, events_are_equal
 
@@ -60,7 +58,7 @@ def test_event_comparison():
         event1 = events_list[0]
         event2 = events_list[1]
         
-        print(f"\n🔍 Comparing events:")
+        print("\n🔍 Comparing events:")
         print(f"Event 1: {event1.get('summary', 'No title')}")
         print(f"Event 2: {event2.get('summary', 'No title')}")
         

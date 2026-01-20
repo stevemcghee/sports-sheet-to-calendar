@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-import logging
-from calendar_sync import parse_sports_events, logger
+from calendar_sync import parse_sports_events
 
 # Don't set up logging here - use the logger from calendar_sync module
 
@@ -53,7 +52,7 @@ def test_real_data_structure():
         print(f"\nEvent {i+1}:")
         print(f"  Summary: {event.get('summary', 'No summary')}")
         print(f"  Description: {repr(event.get('description', 'No description'))}")
-        print(f"  Custom fields:")
+        print("  Custom fields:")
         for field in ['transportation', 'release_time', 'departure_time', 'attire', 'notes', 'bus', 'vans']:
             value = event.get(field)
             if value:

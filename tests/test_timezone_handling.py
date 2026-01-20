@@ -1,10 +1,7 @@
 import unittest
-from datetime import datetime
-import pytz
 import os
-from calendar_sync import parse_sports_events, update_calendar, get_event_key
+from calendar_sync import parse_sports_events, update_calendar
 from unittest.mock import MagicMock
-import sys
 
 class TestTimezoneHandling(unittest.TestCase):
 

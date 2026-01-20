@@ -23,7 +23,7 @@ def test_column_detection_debug():
         print(f"\nEvent {i+1}:")
         print(f"  Summary: {event.get('summary', 'No summary')}")
         print(f"  Description: {repr(event.get('description', 'No description'))}")
-        print(f"  Custom fields:")
+        print("  Custom fields:")
         for field in ['transportation', 'release_time', 'departure_time', 'attire', 'notes', 'bus', 'vans']:
             value = event.get(field)
             if value:

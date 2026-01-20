@@ -21,7 +21,7 @@ spec:
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
-        - image: gcr.io/stevemcghee-slosports/calendar-sync:20251115-171033
+        - image: gcr.io/stevemcghee-slosports/calendar-sync:20251115-172937
           ports:
             - containerPort: 5000
           env:

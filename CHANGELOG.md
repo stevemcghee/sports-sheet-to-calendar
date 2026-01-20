@@ -24,6 +24,8 @@ All notable changes to the Google Calendar Sync project will be documented in th
 - **Gunicorn Configuration**: Optimized for web application performance
 
 ### Fixed
+- **Date Parsing Logic**: Refactored `parse_date` function to correctly handle various date formats, including ranges with partial year information, resolving year inference issues.
+- **`monitor_changes.py` Relocation**: Moved `monitor_changes.py` to the `utils/` directory and updated all internal and external references.
 - **Port 5000 Conflict**: Added documentation and solutions for macOS AirPlay conflict
 - **Authentication Issues**: Improved token refresh and error handling
 - **Parser Reliability**: Enhanced error handling and fallback mechanisms

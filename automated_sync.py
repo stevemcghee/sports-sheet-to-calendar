@@ -6,20 +6,18 @@ import pickle
 import smtplib
 import sys
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from dotenv import load_dotenv
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.cloud import secretmanager
 
 from calendar_sync import (
-    create_or_get_sports_calendar, events_are_equal, get_event_key,
-    get_existing_events, get_spreadsheet_data, list_available_sheets,
+    create_or_get_sports_calendar, get_spreadsheet_data, list_available_sheets,
     parse_sports_events, update_calendar)
 
 # Load environment variables
@@ -177,7 +175,7 @@ class SyncReporter:
         elif summary['has_changes']:
             subject = f"✅ Calendar Sync Report - {summary['total_changes']} changes"
         else:
-            subject = f"📊 Calendar Sync Report - No changes detected"
+            subject = "📊 Calendar Sync Report - No changes detected"
         
         # Generate HTML content
         html_content = f"""

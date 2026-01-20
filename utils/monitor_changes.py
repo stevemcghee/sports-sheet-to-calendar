@@ -19,6 +19,9 @@ from pathlib import Path
 # Load environment variables
 load_dotenv()
 
+# Define project root (assuming script is in utils/ or project root)
+PROJECT_ROOT = Path(__file__).resolve().parents[1] if Path(__file__).resolve().parent.name == 'utils' else Path(__file__).resolve().parent
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -29,7 +32,7 @@ logger = logging.getLogger(__name__)
 class ChangeMonitor:
     """Monitors and analyzes calendar sync changes over time."""
     
-    def __init__(self, db_path='sync_history.db'):
+    def __init__(self, db_path=PROJECT_ROOT / 'sync_history.db'):
         self.db_path = db_path
         self.init_database()
     
@@ -233,7 +236,7 @@ class ChangeMonitor:
             'sheet_statistics': sheet_stats
         }
     
-    def create_charts(self, days=7, output_dir='charts'):
+    def create_charts(self, days=7, output_dir=PROJECT_ROOT / 'charts'):
         """Create visual charts of sync activity."""
         Path(output_dir).mkdir(exist_ok=True)
         
@@ -298,7 +301,7 @@ def main():
     monitor = ChangeMonitor()
     
     # Check for recent sync report files
-    report_files = sorted(Path('.').glob('sync_report_*.json'), reverse=True)
+    report_files = sorted(PROJECT_ROOT.glob('sync_report_*.json'), reverse=True)
     
     if report_files:
         # Load the most recent report
