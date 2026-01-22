@@ -516,7 +516,7 @@ def run_automated_sync_stream():
 
     # Get configuration
     spreadsheet_id_val = os.getenv('SPREADSHEET_ID')
-    spreadsheet_id = access_secret_version(spreadsheet_id_val)
+    spreadsheet_id = access_secret_version(spreadsheet_id_val).strip()
     if not spreadsheet_id:
         logger.error("SPREADSHEET_ID not found in environment variables")
         yield json.dumps({"status": "error", "message": "SPREADSHEET_ID not found in environment variables"})

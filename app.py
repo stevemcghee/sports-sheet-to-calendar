@@ -822,12 +822,12 @@ def preview_sheet_changes():
             # Use the service from the current request context
             calendar_id = create_or_get_sports_calendar(service, calendar_name)
             if calendar_id:
-                subscription_link = f"https://calendar.google.com/calendar/ical/{calendar_id}/public/basic.ics"
-                preview_link = f"https://calendar.google.com/calendar/embed?src={calendar_id}&ctz=America/Los_Angeles"
+                add_to_calendar_link = f"https://calendar.google.com/calendar/ical/{calendar_id}/public/basic.ics"
+                web_preview_link = f"https://calendar.google.com/calendar/embed?src={calendar_id}&ctz=America/Los_Angeles"
                 calendars_info.append({
                     "name": sheet,
-                    "subscription_link": subscription_link,
-                    "preview_link": preview_link
+                    "add_to_calendar_link": add_to_calendar_link,
+                    "web_preview_link": web_preview_link
                 })
 
         return jsonify({
@@ -923,40 +923,35 @@ def apply_changes():
 @app.route('/apply_all_sheets', methods=['POST'])
 def apply_all_sheets():
     """Apply changes to all sheets at once."""
-    # Set up log capture
-    class CaptureLogHandler(logging.Handler):
-        def __init__(self):
-            super().__init__()
-            self.logs = []
-        
-        def emit(self, record):
-            log_entry = self.format(record)
-            self.logs.append(log_entry)
+    logger.info("--- apply_all_sheets route called ---")
     
-    capture_handler = CaptureLogHandler()
+    # Set up a log handler to capture logs for this request
+    log_stream = io.StringIO()
+    capture_handler = logging.StreamHandler(log_stream)
     capture_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     capture_handler.setFormatter(formatter)
     
-    # Add the handler to the logger
+    # Add the handler to the root logger to capture everything
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(capture_handler)
     
     try:
         data = request.get_json()
+        logger.info(f"Received data in apply_all_sheets: {json.dumps(data)}")
+
         spreadsheet_id_val = data.get('spreadsheet_id')
+        logger.info(f"Spreadsheet ID from request: {spreadsheet_id_val}")
+
         spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
+        logger.info(f"Resolved spreadsheet ID: {spreadsheet_id}")
 
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
 
         logger.info("Starting apply_all_sheets route")
         service = get_calendar_service()
-        
-        # Get credentials for sheets service
-        credentials = Credentials(**session['credentials'])
-        sheets_service = build('sheets', 'v4', credentials=credentials)
+        sheets_service = get_sheets_service()
         
         # Get all available sheets
         logger.info("Getting all available sheets")
@@ -1055,6 +1050,8 @@ def apply_all_sheets():
         logger.info(f"Bulk operation completed. Successful sheets: {len(successful_sheets)}, Failed sheets: {len(failed_sheets)}")
         logger.info(f"Total events created: {total_events_created}, updated: {total_events_updated}, deleted: {total_events_deleted}")
         
+        log_contents = log_stream.getvalue()
+
         return jsonify({
             'success': True,
             'summary': {
@@ -1066,16 +1063,17 @@ def apply_all_sheets():
                 'total_events_deleted': total_events_deleted
             },
             'sheet_results': sheet_results,
-            'debug_logs': capture_handler.logs
+            'logs': log_contents
         })
         
     except Exception as e:
         logger.error(f"Error in apply_all_sheets: {str(e)}")
         logger.error(traceback.format_exc())
+        log_contents = log_stream.getvalue()
         return jsonify({
             'success': False,
             'error': str(e),
-            'debug_logs': capture_handler.logs
+            'logs': log_contents
         }), 400
     finally:
         # Remove the handler to avoid duplicate logs
@@ -1084,6 +1082,7 @@ def apply_all_sheets():
 @app.route('/apply_all_to_master_calendar', methods=['POST'])
 def apply_all_to_master_calendar():
     """Create or update a calendar called 'SLOHS All Sports' with all events from all sheets."""
+    logger.info("--- apply_all_to_master_calendar route called ---")
     class CaptureLogHandler(logging.Handler):
         def __init__(self):
             super().__init__()
@@ -1100,8 +1099,14 @@ def apply_all_to_master_calendar():
     root_logger.addHandler(capture_handler)
     try:
         data = request.get_json()
+        logger.info(f"Received data in apply_all_to_master_calendar: {json.dumps(data)}")
+
         spreadsheet_id_val = data.get('spreadsheet_id')
+        logger.info(f"Spreadsheet ID from request: {spreadsheet_id_val}")
+        
         spreadsheet_id = resolve_spreadsheet_id(spreadsheet_id_val)
+        logger.info(f"Resolved spreadsheet ID: {spreadsheet_id}")
+
         if not spreadsheet_id:
             return jsonify({'success': False, 'error': 'Spreadsheet ID is required'})
         logger.info("Starting apply_all_to_master_calendar route")
