@@ -992,7 +992,10 @@ def get_event_key(event):
     # Get start date
     if 'dateTime' in start:
         dt = parser.isoparse(start['dateTime'])
-        start_date_str = dt.date().isoformat() # Use local date, not UTC
+        # Convert to Pacific time to ensure consistent dates across UTC/Local representation
+        pacific_tz = pytz.timezone('America/Los_Angeles')
+        dt_pacific = dt.astimezone(pacific_tz)
+        start_date_str = dt_pacific.date().isoformat()
     elif 'date' in start:
         start_date_str = start['date']
     else:
