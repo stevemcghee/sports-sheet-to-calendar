@@ -1374,9 +1374,13 @@ def trigger_sync():
     logger.info("Sync triggered")
     try:
         logger.info("Calling run_automated_sync")
-        run_automated_sync()
-        logger.info("Automated sync process finished successfully.")
-        return jsonify({'success': True, 'message': 'Sync triggered successfully!'})
+        success = run_automated_sync()
+        if success:
+            logger.info("Automated sync process finished successfully.")
+            return jsonify({'success': True, 'message': 'Sync triggered successfully!'})
+        else:
+            logger.error("Automated sync process failed.")
+            return jsonify({'success': False, 'error': 'Sync process failed. Check server logs for details.'}), 500
     except Exception as e:
         logger.error(f"Error in trigger_sync: {str(e)}")
         logger.error(traceback.format_exc())
