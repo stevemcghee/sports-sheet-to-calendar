@@ -547,6 +547,11 @@ def parse_sports_events(data, sheet_name=None):
             event = row[event_idx]
             location = row[location_idx]
             
+            # Skip rows with TBA/TBD dates
+            if str(date_str).strip().upper() in ['TBA', 'TBD']:
+                logger.debug(f"Row {i+data_start_row+1} has date '{date_str}' - skipping")
+                continue
+
             if time_idx is not None:
                 logger.debug(f"Accessing row[{time_idx}] for time. Row length is {len(row)}.")
                 time_from_row = row[time_idx] if len(row) > time_idx else "INDEX OUT OF BOUNDS"
